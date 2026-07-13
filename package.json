@@ -1,0 +1,25 @@
+{
+  "name": "sugarcare-wa-bot",
+  "version": "1.0.0",
+  "description": "SugarCARE Clinics WhatsApp bot — deterministic state machine, no RAG. Malayalam-first receptionist that captures leads and routes clinical questions to humans.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim": "node scripts/simulate.js",
+    "sim:new-lead": "node scripts/simulate.js --scenario new-lead",
+    "sim:existing": "node scripts/simulate.js --scenario existing"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

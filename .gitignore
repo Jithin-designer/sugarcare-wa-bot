@@ -1,0 +1,18 @@
+# Secrets — never commit
+.env
+
+# Runtime data (SQLite db + mock outbox)
+data/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
