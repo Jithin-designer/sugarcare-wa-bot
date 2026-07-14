@@ -35,48 +35,28 @@ const text = (t) => feed({ type: 'text', text: t });
 const button = (id) => feed({ type: 'interactive', buttonId: id });
 const list = (id) => feed({ type: 'interactive', listId: id });
 
-describe('full new-lead walkthrough', () => {
-  it('captures a lead with name, interest and clinic', async () => {
-    await text('namaskaram');          // greet
-    await button(IDS.BTN_NEW);         // → LEAD_INTEREST
-    await list(IDS.INTEREST_CGM);      // → LEAD_CLINIC
-    await list(clinicRowId('chemmad')); // → LEAD_NAME
-    await text('Fathima');             // → HUMAN_HANDOFF + lead saved
+describe('full booking-first walkthrough', () => {
+  it('captures a booking lead with name and clinic (WELCOME → Book cheyyam)', async () => {
+    await text('namaskaram');            // → WELCOME, greeted
+    await button(IDS.BTN_BOOK);          // → CLINIC_SELECT
+    await list(clinicRowId('chemmad'));  // → NAME_CAPTURE
+    await text('Fathima');               // → BOOKING_COMPLETE + lead saved
 
     const leads = db.leadsForPhone(from);
     expect(leads).toHaveLength(1);
     expect(leads[0]).toMatchObject({
-      name: 'Fathima', interest: 'cgm', clinic: 'chemmad', lead_type: 'new', priority: 0,
+      name: 'Fathima', clinic: 'chemmad', lead_type: 'booking', priority: 0,
     });
 
     const c = db.getConversation(from);
-    expect(c.state).toBe(STATES.HUMAN_HANDOFF);
-    expect(c.dormant_until).toBeGreaterThan(Date.now());
+    expect(c.state).toBe(STATES.BOOKING_COMPLETE);
   });
 });
 
-describe('full existing-patient appointment walkthrough', () => {
-  it('saves a callback lead with the preferred day', async () => {
-    await text('hi');                  // greet
-    await button(IDS.BTN_EXISTING);    // → PATIENT_MENU
-    await button(IDS.BTN_APPT);        // → APPT_CLINIC
-    await list(clinicRowId('edappal')); // → APPT_DAY
-    await text('ബുധൻ');                // → DORMANT + callback saved
-
-    const leads = db.leadsForPhone(from);
-    expect(leads).toHaveLength(1);
-    expect(leads[0]).toMatchObject({ lead_type: 'callback', clinic: 'edappal', priority: 0 });
-    expect(leads[0].notes).toContain('ബുധൻ');
-
-    const c = db.getConversation(from);
-    expect(c.state).toBe(STATES.DORMANT);
-  });
-});
-
-describe('existing-patient report request', () => {
+describe('existing-patient report request (WELCOME → talk to team bridge)', () => {
   it('creates a PRIORITY lead and hands off', async () => {
-    await text('hello');
-    await button(IDS.BTN_EXISTING);
+    await text('hello');                    // → WELCOME, greeted
+    await button(IDS.BTN_TALK_TO_TEAM);      // → PATIENT_MENU (old flow, kept intact)
     await button(IDS.BTN_REPORT);
 
     const leads = db.leadsForPhone(from);
@@ -88,13 +68,16 @@ describe('existing-patient report request', () => {
 
 describe('dormancy gating', () => {
   it('ignores inbound messages while the conversation is dormant', async () => {
-    // Drive to a dormant close (appointment callback).
+    // Drive to a dormant close via the booking-complete → closing-loop → No path.
     await text('hi');
-    await button(IDS.BTN_EXISTING);
-    await button(IDS.BTN_APPT);
+    await button(IDS.BTN_BOOK);
     await list(clinicRowId('kanjirathani'));
-    await text('തിങ്കൾ'); // → DORMANT for 12h
+    await text('Ramesh');
+    const closingSends = sends.length;
+    await button(IDS.BTN_CLOSING_NO); // → DORMANT for 12h
+
     const sentSoFar = sends.length;
+    expect(sentSoFar).toBeGreaterThan(closingSends);
 
     // A follow-up ping during dormancy must be logged, not answered.
     const status = await text('are you there?');
@@ -115,7 +98,7 @@ describe('clinical question end-to-end', () => {
 
 describe('two-strike fallback', () => {
   it('re-prompts once, then hands off on the second miss', async () => {
-    await text('hi');                    // greet, state MENU greeted
+    await text('hi');                    // greet, state WELCOME greeted
     const s1 = await button('nope_1');   // 1st miss → re-prompt
     expect(s1).toBe('processed');
     expect(db.getConversation(from).fallback_count).toBe(1);

@@ -148,12 +148,12 @@ describe('clinical guard', () => {
 
 // ── Fallback (2 strikes → handoff) ───────────────────────────────────────────
 describe('fallback', () => {
-  it('1st unrecognised input → re-prompt main menu, count=1', () => {
+  it('1st unrecognised input → re-prompt WELCOME (booking-first flow), count=1', () => {
     const r = processMessage(conv({ state: STATES.LEAD_INTEREST, data: { greeted: true }, fallback_count: 0 }), txt('random gibberish'));
-    expect(r.nextState).toBe(STATES.MENU);
+    expect(r.nextState).toBe(STATES.WELCOME);
     expect(r.fallbackCount).toBe(1);
-    expect(r.replies).toHaveLength(2); // apology + menu
-    expect(buttonIds(r.replies[1])).toContain(IDS.BTN_NEW);
+    expect(r.replies).toHaveLength(2); // apology + WELCOME buttons
+    expect(buttonIds(r.replies[1])).toContain(IDS.BTN_BOOK);
   });
 
   it('2nd unrecognised input → HUMAN_HANDOFF, dormant 12h', () => {
@@ -175,9 +175,9 @@ describe('english flow', () => {
 
 // ── Terminal-state safety ────────────────────────────────────────────────────
 describe('terminal state re-entry', () => {
-  it('a message in HUMAN_HANDOFF greets fresh (defensive reset)', () => {
+  it('a message in HUMAN_HANDOFF greets fresh at WELCOME (defensive reset, booking-first flow)', () => {
     const r = processMessage(conv({ state: STATES.HUMAN_HANDOFF, data: { greeted: true } }), txt('hello again'));
-    expect(r.nextState).toBe(STATES.MENU);
+    expect(r.nextState).toBe(STATES.WELCOME);
     expect(r.nextData.greeted).toBe(true);
   });
 });
