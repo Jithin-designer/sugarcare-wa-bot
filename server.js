@@ -115,10 +115,11 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
     db.markProcessed(msg.messageId, now);
   }
 
-  // Load (or default) the conversation.
+  // Load (or default) the conversation. Booking-first flow: any brand-new
+  // phone number lands on WELCOME (Book/Doubt), not the old MENU greeting.
   let conv = db.getConversation(msg.from) || {
     phone: msg.from,
-    state: STATES.MENU,
+    state: STATES.WELCOME,
     lang: 'ml',
     data: {},
     fallback_count: 0,
@@ -133,12 +134,12 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
     return 'dormant';
   }
 
-  // Terminal state or expired dormancy → start a fresh conversation at MENU,
-  // preserving only the chosen language.
+  // Terminal state or expired dormancy → start a fresh conversation at
+  // WELCOME (booking-first flow), preserving only the chosen language.
   if (TERMINAL_STATES.has(conv.state) || (conv.dormant_until && now >= conv.dormant_until)) {
     conv = {
       phone: msg.from,
-      state: STATES.MENU,
+      state: STATES.WELCOME,
       lang: conv.lang || 'ml',
       data: {},
       fallback_count: 0,
@@ -161,7 +162,15 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
     last_user_message_at: now,
     updated_at: now,
   });
-  if (r.leadData) db.saveLead({ ...r.leadData, created_at: now });
+  if (r.leadData) {
+    db.saveLead({ ...r.leadData, created_at: now });
+    // Booking-first flow: extra console visibility in MOCK_MODE (the lead is
+    // ALSO always written to SQLite above — see BOOKING-FLOW-CHANGES.md for
+    // why this doesn't skip the DB write the way the original brief phrased it).
+    if (r.leadData.lead_type === 'booking' && isMockEnv()) {
+      console.log(`[MOCK LEAD] booking: phone=${r.leadData.phone} name=${r.leadData.name} clinic=${r.leadData.clinic}`);
+    }
+  }
 
   // ── Dispatch (HARD RULE #4: only within the 24h session window) ──
   // This inbound just re-opened the window, so replies to it are always allowed.

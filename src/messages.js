@@ -50,6 +50,13 @@ export const IDS = {
   BTN_APPT: 'btn_appt',
   BTN_REPORT: 'btn_report',
   BTN_TEAM: 'btn_team',
+
+  // Booking-first flow (WELCOME entry point)
+  BTN_BOOK: 'btn_book',
+  BTN_DOUBT: 'btn_doubt',
+  BTN_TALK_TO_TEAM: 'btn_talk_to_team', // WELCOME's bridge into the existing PATIENT_MENU
+  BTN_CLOSING_YES: 'btn_closing_yes',
+  BTN_CLOSING_NO: 'btn_closing_no',
 };
 
 export const INTEREST_IDS = new Set([
@@ -102,6 +109,37 @@ const ML = {
   // Fallback
   fallback_reprompt: 'ക്ഷമിക്കണം, മനസ്സിലായില്ല 🙏 താഴെ നിന്ന് ഒന്ന് തിരഞ്ഞെടുക്കൂ:',
   fallback_final: 'ഞങ്ങളുടെ ടീം നേരിട്ട് മറുപടി തരും 🙏',
+  fallback_handoff_number: `ഞങ്ങളുടെ team-നെ ബന്ധപ്പെടാൻ: ${TEAM_PHONE}`,
+
+  // ── Booking-first flow (WELCOME entry point) ──────────────────────────────
+  welcome_greeting: 'നമസ്കാരം! 👋 SugarCARE Clinics-ലേക്ക് സ്വാഗതം. ഞങ്ങൾ എങ്ങനെ സഹായിക്കട്ടെ?',
+  btn_book: '📅 Book cheyyam',
+  btn_doubt: '❓ Doubt undu',
+  btn_talk_to_team: 'ടീമിനോട് സംസാരിക്കണം',
+
+  booking_clinic_body: 'ഏത് ക്ലിനിക്കിൽ ആണ് അപ്പോയിന്റ്മെന്റ് വേണ്ടത്? താഴെ നിന്ന് തിരഞ്ഞെടുക്കൂ 👇',
+  booking_name_body: 'നിങ്ങളുടെ പേര്?',
+  booking_confirm_prefix: 'നന്ദി',
+  booking_confirm_suffix: 'ടീം ഉടൻ വിളിക്കും, സമയം fix ചെയ്യാം.',
+
+  // Q&A path
+  qa_prompt_body: 'എന്താ സംശയം? ചോദിച്ചോളൂ 🙂',
+  qa_footer_body: 'വേറെ എന്തെങ്കിലും വേണോ?',
+  qa_answer_diet: 'ഭക്ഷണത്തിൽ കാർബോഹൈഡ്രേറ്റ് (ചോറ്, ചപ്പാത്തി) കുറച്ച്, പച്ചക്കറികളും നാരുകൾ ഉള്ള ഭക്ഷണവും കൂട്ടുന്നത് sugar control-ന് നല്ലതാ. ഓരോരുത്തർക്കും വ്യത്യാസം ഉണ്ടാവും, കൃത്യമായ diet plan വേണമെങ്കിൽ ഡോക്ടറെ കാണുന്നതാ നല്ലത്.',
+  qa_answer_exercise: 'ദിവസവും 30 മിനിറ്റ് നടത്തം (walking) പോലുള്ള light exercise sugar level control ചെയ്യാൻ സഹായിക്കും. പുതിയ exercise തുടങ്ങുന്നതിന് മുൻപ് ഡോക്ടറോട് ഒന്ന് ചോദിക്കുന്നതാ നല്ലത്.',
+  qa_answer_monitoring: 'Sugar പതിവായി glucometer വച്ച് check ചെയ്യുന്നത് നല്ലതാ — ഡോക്ടർ പറഞ്ഞ frequency അനുസരിച്ച്. Reading-കൾ ഒരു diary-യിൽ എഴുതി വച്ചാൽ ഡോക്ടർക്ക് പെട്ടെന്ന് മനസ്സിലാക്കാൻ എളുപ്പമാവും.',
+  qa_answer_hba1c: 'HbA1c എന്നത് കഴിഞ്ഞ 2-3 മാസത്തെ ശരാശരി sugar level കാണിക്കുന്ന ഒരു blood test ആണ്. ഇത് ഡോക്ടർ diabetes control എത്ര നല്ലതാ എന്ന് നോക്കാൻ ഉപയോഗിക്കുന്ന ഒരു പ്രധാന test ആണ്.',
+  qa_redirect_personal: `ഇത് doctor-നോട് നേരിട്ട് ചോദിക്കുന്നതാണ് നല്ലത്.`,
+  qa_redirect_unknown: 'ഇതിന് കൃത്യമായ ഉത്തരം തരാൻ ഞങ്ങൾക്ക് പറ്റില്ല 🙏 doctor-നോട് നേരിട്ട് ചോദിക്കുന്നതാണ് നല്ലത്.',
+
+  // Mid-booking interruption + resume
+  midbooking_answered_prefix: 'ശരി! Back to booking —',
+
+  // Closing loop
+  closing_prompt: 'വേറെ എന്തെങ്കിലും സഹായം വേണോ?',
+  btn_yes: 'Yes',
+  btn_no: 'No',
+  closing_bye: 'നന്ദി! 🙏 SugarCARE-ൽ കാണാം.',
 };
 
 const EN = {
@@ -139,6 +177,37 @@ const EN = {
 
   fallback_reprompt: 'Sorry, I did not follow that 🙏 Please pick one below:',
   fallback_final: 'Our team will reply to you directly 🙏',
+  fallback_handoff_number: `You can reach our team directly: ${TEAM_PHONE}`,
+
+  // ── Booking-first flow (WELCOME entry point) ──────────────────────────────
+  welcome_greeting: 'Hello! 👋 Welcome to SugarCARE Clinics. How can we help you today?',
+  btn_book: '📅 Book cheyyam',
+  btn_doubt: '❓ Doubt undu',
+  btn_talk_to_team: 'Talk to our team',
+
+  booking_clinic_body: 'Which clinic would you like the appointment at? Please pick one below 👇',
+  booking_name_body: 'What is your name?',
+  booking_confirm_prefix: 'Thank you',
+  booking_confirm_suffix: 'team will call you shortly to fix a time.',
+
+  // Q&A path
+  qa_prompt_body: 'What is your question? Go ahead 🙂',
+  qa_footer_body: 'Anything else?',
+  qa_answer_diet: 'Cutting down on carbs (rice, chapati) and adding more vegetables and fibre helps with sugar control. Everyone is different, so for an exact diet plan it is best to check with your doctor.',
+  qa_answer_exercise: 'Light exercise like a 30-minute walk every day can help control sugar levels. Before starting any new exercise, it is best to check with your doctor.',
+  qa_answer_monitoring: 'Checking your sugar regularly with a glucometer, at the frequency your doctor recommends, is a good habit. Keeping a diary of your readings makes it easier for the doctor to review.',
+  qa_answer_hba1c: 'HbA1c is a blood test that shows your average sugar level over the last 2-3 months. Doctors use it to see how well diabetes is being controlled overall.',
+  qa_redirect_personal: 'This is best asked directly to the doctor.',
+  qa_redirect_unknown: 'We are not able to give an exact answer to this 🙏 It is best to ask the doctor directly.',
+
+  // Mid-booking interruption + resume
+  midbooking_answered_prefix: 'Okay! Back to booking —',
+
+  // Closing loop
+  closing_prompt: 'Do you need any other help?',
+  btn_yes: 'Yes',
+  btn_no: 'No',
+  closing_bye: 'Thank you! 🙏 See you at SugarCARE.',
 };
 
 const TABLES = { ml: ML, en: EN };
@@ -262,6 +331,110 @@ export function fallbackReprompt(lang) {
 
 export function fallbackFinal(lang) {
   return textMsg(t(lang, 'fallback_final'));
+}
+
+export function fallbackHandoffNumber(lang) {
+  return textMsg(t(lang, 'fallback_handoff_number'));
+}
+
+// ── Booking-first flow (WELCOME entry point) ─────────────────────────────────
+
+export function welcome(lang) {
+  return buttonsMsg(t(lang, 'welcome_greeting'), [
+    { id: IDS.BTN_BOOK, title: t(lang, 'btn_book') },
+    { id: IDS.BTN_DOUBT, title: t(lang, 'btn_doubt') },
+  ]);
+}
+
+export function bookingClinicList(lang) {
+  return clinicList(lang, t(lang, 'booking_clinic_body'));
+}
+
+export function bookingNameBody(lang) {
+  return textMsg(t(lang, 'booking_name_body'));
+}
+
+/** Booking confirmation — interpolates the captured name + chosen clinic's label. */
+export function bookingConfirm(lang, name, clinicId) {
+  const clinic = clinicById(clinicId);
+  const clinicLabel = clinic ? (lang === 'en' ? clinic.en : clinic.ml) : '';
+  const safeName = String(name || '').trim();
+  return textMsg(
+    `${t(lang, 'booking_confirm_prefix')} ${safeName}! 🙏 ${clinicLabel} ${t(lang, 'booking_confirm_suffix')}`
+  );
+}
+
+// ── Q&A path ──────────────────────────────────────────────────────────────────
+
+/** Shown right after "Doubt undu" is tapped — invites the typed question. */
+export function qaPrompt(lang) {
+  return textMsg(t(lang, 'qa_prompt_body'));
+}
+
+/** The 2 buttons that must end EVERY Q&A reply (own interactive payload — WhatsApp
+ * cannot attach buttons to a plain text bubble, same reason fallbackReprompt() is
+ * two payloads). */
+export function qaFooter(lang) {
+  return buttonsMsg(t(lang, 'qa_footer_body'), [
+    { id: IDS.BTN_BOOK, title: t(lang, 'btn_book') },
+    { id: IDS.BTN_DOUBT, title: t(lang, 'btn_doubt') },
+  ]);
+}
+
+const QA_ANSWER_KEYS = {
+  diet: 'qa_answer_diet',
+  exercise: 'qa_answer_exercise',
+  monitoring: 'qa_answer_monitoring',
+  hba1c: 'qa_answer_hba1c',
+};
+
+/** Plain educational-answer text for a topic (no footer) — used standalone by
+ * qaAnswer() and folded into midBookingBriefAnswer() during a booking pause. */
+function qaAnswerText(lang, topic) {
+  const key = QA_ANSWER_KEYS[topic];
+  return key ? t(lang, key) : t(lang, 'qa_redirect_unknown');
+}
+
+/** A canned educational answer + the mandatory [Book][Doubt] footer (2 payloads). */
+export function qaAnswer(lang, topic) {
+  return [textMsg(qaAnswerText(lang, topic)), qaFooter(lang)];
+}
+
+/** The "ask the doctor directly" deferral for personal-medical Q&A + footer. */
+export function qaRedirectPersonal(lang) {
+  return [textMsg(t(lang, 'qa_redirect_personal')), qaFooter(lang)];
+}
+
+// ── Mid-booking interruption + resume ────────────────────────────────────────
+
+/**
+ * A question interrupted booking (CLINIC_SELECT or NAME_CAPTURE). Answer it
+ * briefly — a topic-education line, or the doctor-deferral if it was a
+ * personal-medical question — then resume exactly where booking paused.
+ * `pendingPayloads` is whatever prompt was pending (clinic list or name ask).
+ * `topic` is null for a personal-medical question (deferral wins over any
+ * topic match — see isPersonalMedicalQuestion in stateMachine.js).
+ */
+export function midBookingBriefAnswer(lang, topic, pendingPayloads) {
+  const brief = topic === 'personal' ? t(lang, 'qa_redirect_personal') : qaAnswerText(lang, topic);
+  return [
+    textMsg(brief),
+    textMsg(t(lang, 'midbooking_answered_prefix')),
+    ...[].concat(pendingPayloads),
+  ];
+}
+
+// ── Closing loop ──────────────────────────────────────────────────────────────
+
+export function closingLoop(lang) {
+  return buttonsMsg(t(lang, 'closing_prompt'), [
+    { id: IDS.BTN_CLOSING_YES, title: t(lang, 'btn_yes') },
+    { id: IDS.BTN_CLOSING_NO, title: t(lang, 'btn_no') },
+  ]);
+}
+
+export function closingBye(lang) {
+  return textMsg(t(lang, 'closing_bye'));
 }
 
 // ── Introspection helpers (used by tests + button-length validation) ─────────

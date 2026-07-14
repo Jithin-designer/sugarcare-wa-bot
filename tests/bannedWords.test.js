@@ -11,7 +11,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { findBannedWords, BANNED_WORDS } from '../src/bannedWords.js';
-import { allStrings, menu, interestList, leadClinicList, patientMenu, apptClinicList, fallbackReprompt } from '../src/messages.js';
+import {
+  allStrings, menu, interestList, leadClinicList, patientMenu, apptClinicList, fallbackReprompt,
+  welcome, bookingClinicList, bookingNameBody, bookingConfirm, qaPrompt, qaAnswer, qaRedirectPersonal,
+  midBookingBriefAnswer, closingLoop, closingBye,
+} from '../src/messages.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = path.resolve(__dirname, '../src');
@@ -30,7 +34,20 @@ describe('messages.js reply strings', () => {
     // Render every screen builder in both languages and scan the flattened text.
     const payloads = [];
     for (const lang of ['ml', 'en']) {
-      payloads.push(menu(lang), interestList(lang), leadClinicList(lang), patientMenu(lang), apptClinicList(lang), ...fallbackReprompt(lang));
+      payloads.push(
+        menu(lang), interestList(lang), leadClinicList(lang), patientMenu(lang), apptClinicList(lang),
+        ...fallbackReprompt(lang),
+        // Booking-first flow (feature/booking-first-flow)
+        welcome(lang), bookingClinicList(lang), bookingNameBody(lang),
+        bookingConfirm(lang, 'Test Name', 'edappal'),
+        qaPrompt(lang),
+        ...qaAnswer(lang, 'diet'), ...qaAnswer(lang, 'exercise'), ...qaAnswer(lang, 'monitoring'), ...qaAnswer(lang, 'hba1c'),
+        ...qaAnswer(lang, null), // qa_redirect_unknown branch
+        ...qaRedirectPersonal(lang),
+        ...midBookingBriefAnswer(lang, 'diet', bookingClinicList(lang)),
+        ...midBookingBriefAnswer(lang, 'personal', bookingNameBody(lang)),
+        closingLoop(lang), closingBye(lang)
+      );
     }
     const texts = JSON.stringify(payloads);
     expect(findBannedWords(texts)).toEqual([]);
