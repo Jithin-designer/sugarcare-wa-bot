@@ -3,7 +3,7 @@
  *
  * MOCK_MODE=true  → nothing hits the network. Each message is console-logged and
  *                   appended to data/mock_outbox.jsonl (the simulator reads it).
- * MOCK_MODE=false → POST to graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages.
+ * MOCK_MODE=false → POST to graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages.
  *
  * The payload passed in is a Meta message body WITHOUT messaging_product/to
  * (as produced by messages.js). We add those two fields at send time.
@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const GRAPH_VERSION = 'v18.0';
+const GRAPH_VERSION = 'v25.0';
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 const outboxPath = () => process.env.MOCK_OUTBOX || 'data/mock_outbox.jsonl';

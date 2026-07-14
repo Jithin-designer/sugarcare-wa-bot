@@ -27,7 +27,7 @@ export const CLINICS = [
   { id: 'padinjarangadi', en: 'Padinjarangadi', ml: 'പടിഞ്ഞാറങ്ങാടി' },
   { id: 'kanjirathani', en: 'Kanjirathani', ml: 'കാഞ്ഞിരത്താണി' },
   { id: 'punnayurkulam', en: 'Punnayurkulam', ml: 'പുന്നയൂർക്കുളം' },
-  { id: 'vattamkulam', en: 'Vattamkulam', ml: 'വാട്ടംകുളം' },
+  { id: 'edappal', en: 'Edappal', ml: 'എടപ്പാൾ' },
 ];
 
 export const clinicRowId = (id) => `clinic_${id}`;

@@ -60,12 +60,12 @@ describe('full existing-patient appointment walkthrough', () => {
     await text('hi');                  // greet
     await button(IDS.BTN_EXISTING);    // → PATIENT_MENU
     await button(IDS.BTN_APPT);        // → APPT_CLINIC
-    await list(clinicRowId('vattamkulam')); // → APPT_DAY
+    await list(clinicRowId('edappal')); // → APPT_DAY
     await text('ബുധൻ');                // → DORMANT + callback saved
 
     const leads = db.leadsForPhone(from);
     expect(leads).toHaveLength(1);
-    expect(leads[0]).toMatchObject({ lead_type: 'callback', clinic: 'vattamkulam', priority: 0 });
+    expect(leads[0]).toMatchObject({ lead_type: 'callback', clinic: 'edappal', priority: 0 });
     expect(leads[0].notes).toContain('ബുധൻ');
 
     const c = db.getConversation(from);
