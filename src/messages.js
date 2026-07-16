@@ -139,14 +139,21 @@ const ML = {
   // ── WELCOME (3-row list) ──────────────────────────────────────────────────
   welcome_greeting:
     'നമസ്കാരം! 🙏 SugarCARE Clinics-ലേക്ക് സ്വാഗതം. ഞാൻ എങ്ങനെയാണ് നിങ്ങളെ സഹായിക്കേണ്ടത്?',
-  welcome_book: '📅 അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യാം',
-  welcome_doubt: '❓ സംശയങ്ങൾ ചോദിക്കാം',
-  welcome_meds: '💊 മരുന്നുകൾ ഓർഡർ ചെയ്യാം',
+  // WhatsApp list-row titles ≤ 24 code points. Full phrasing lives in the row
+  // description (welcome_*_desc); these are the short scannable titles.
+  welcome_book: '📅 ബുക്ക് ചെയ്യാം',
+  welcome_doubt: '❓ സംശയങ്ങൾ',
+  welcome_meds: '💊 മരുന്ന് ഓർഡർ',
+  welcome_book_desc: 'അപ്പോയിന്റ്മെന്റ് ബുക്ക് ചെയ്യാം',
+  welcome_doubt_desc: 'സംശയങ്ങൾ ചോദിക്കാം',
+  welcome_meds_desc: 'മരുന്നുകൾ ഓർഡർ ചെയ്യാം',
   welcome_button: 'തിരഞ്ഞെടുക്കൂ',
 
   // ── Shared clinic picker (booking / medicine / two-step FAQ) ──────────────
   clinic_prompt: 'നിങ്ങളുടെ അടുത്തുള്ള ക്ലിനിക് ഏതാണ്?',
-  clinic_pick_button: 'ക്ലിനിക് തിരഞ്ഞെടുക്കൂ',
+  // List "open" button ≤ 20 code points. Context (the prompt above) already
+  // names the clinic, so a plain "select" reads fine and fits.
+  clinic_pick_button: 'തിരഞ്ഞെടുക്കൂ',
   clinic_pick_section: 'SugarCARE ക്ലിനിക്കുകൾ',
 
   // ── Booking confirmation (no name step) ───────────────────────────────────
@@ -163,10 +170,10 @@ const ML = {
   faq_list_title: FAQ_LIST_TITLE,
   faq_list_button: 'തിരഞ്ഞെടുക്കൂ',
 
-  // ── FAQ trailing buttons ──────────────────────────────────────────────────
+  // ── FAQ trailing buttons (reply buttons ≤ 20 code points) ─────────────────
   btn_book_short: '📅 ബുക്ക് ചെയ്യാം',
   btn_order_meds_short: '💊 മരുന്ന് ഓർഡർ',
-  btn_ask_another: 'വേറെ സംശയം ഉണ്ടോ?',
+  btn_ask_another: 'വേറെ സംശയം?',
 
   // ── Safety redirect (personal-medical + recovery-outcome) ─────────────────────
   doctor_redirect:
@@ -239,9 +246,9 @@ export function clinicPicker(body = ML.clinic_prompt) {
 
 export function welcome() {
   const rows = [
-    { id: IDS.BTN_BOOK, title: ML.welcome_book },
-    { id: IDS.BTN_DOUBT, title: ML.welcome_doubt },
-    { id: IDS.BTN_MEDS, title: ML.welcome_meds },
+    { id: IDS.BTN_BOOK, title: ML.welcome_book, description: ML.welcome_book_desc },
+    { id: IDS.BTN_DOUBT, title: ML.welcome_doubt, description: ML.welcome_doubt_desc },
+    { id: IDS.BTN_MEDS, title: ML.welcome_meds, description: ML.welcome_meds_desc },
   ];
   return listMsg(ML.welcome_greeting, ML.welcome_button, rows);
 }
@@ -270,9 +277,10 @@ export function medicineConfirm() {
 
 // ── Doubt flow ───────────────────────────────────────────────────────────────
 
-/** The 8-row FAQ interactive list. */
+/** The 8-row FAQ interactive list. Short title (≤24 cp) + the full question as
+ * the row description (≤72 cp) — WhatsApp rejects over-length titles outright. */
 export function faqList() {
-  const rows = FAQ_ROWS.map((r) => ({ id: r.id, title: r.title }));
+  const rows = FAQ_ROWS.map((r) => ({ id: r.id, title: r.title, description: r.description }));
   return listMsg(ML.faq_list_intro, ML.faq_list_button, rows, ML.faq_list_title);
 }
 

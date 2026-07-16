@@ -15,16 +15,23 @@
 
 // ── The 8 doubt-list rows ────────────────────────────────────────────────────
 // Row ids are the WhatsApp list_reply ids the state machine dispatches on.
+//
+// WhatsApp list-row limits (counted in Unicode CODE POINTS, not glyphs — a
+// Malayalam cluster like "ക്ക" is several code points): title ≤ 24, optional
+// description ≤ 72. The full question lives in `description`; the short
+// scannable label lives in `title`. bannedWords.test.js asserts every title
+// and description is within limit, so an over-length string fails the build
+// (this is the outage this file's shortening fixes).
 
 export const FAQ_ROWS = [
-  { id: 'faq_location', title: '📍 സ്ഥലം / ലാൻഡ്മാർക്ക്' },
-  { id: 'faq_treatment', title: '🩺 എന്ത് തരം ചികിത്സയാണ് ?' },
-  { id: 'faq_fees', title: '💰 ഫീസ് എത്രയാണ്?' },
-  { id: 'faq_timing', title: '🕐 ക്ലിനിക് സമയം എങ്ങനെ ആണ്?' },
-  { id: 'faq_reports', title: '📋 ഏതൊക്കെ റിപ്പോർട്ട് ആണ് കൊണ്ടുവരേണ്ടത്?' },
-  { id: 'faq_diet', title: '🍚 ഭക്ഷണക്രമം എങ്ങനെ?' },
-  { id: 'faq_multi', title: '❤️ മറ്റ് അസുഖങ്ങൾക്കും ചികിത്സ ഉണ്ടോ?' },
-  { id: 'faq_delivery', title: '🚚 മരുന്ന് ഡെലിവറി ഉണ്ടോ?' },
+  { id: 'faq_location', title: '📍 സ്ഥലം / ലാൻഡ്മാർക്ക്', description: 'സ്ഥലം / ലാൻഡ്മാർക്ക് എവിടെയാണ്?' },
+  { id: 'faq_treatment', title: '🩺 ചികിത്സ എന്ത് തരം?', description: 'എന്ത് തരം ചികിത്സയാണ്?' },
+  { id: 'faq_fees', title: '💰 ഫീസ് എത്ര?', description: 'ഫീസ് എത്രയാണ്?' },
+  { id: 'faq_timing', title: '🕐 ക്ലിനിക് സമയം', description: 'ക്ലിനിക് സമയം എങ്ങനെ ആണ്?' },
+  { id: 'faq_reports', title: '📋 റിപ്പോർട്ട്', description: 'ഏതൊക്കെ റിപ്പോർട്ട് ആണ് കൊണ്ടുവരേണ്ടത്?' },
+  { id: 'faq_diet', title: '🍚 ഭക്ഷണക്രമം', description: 'ഭക്ഷണക്രമം എങ്ങനെ?' },
+  { id: 'faq_multi', title: '❤️ മറ്റ് അസുഖങ്ങൾ', description: 'മറ്റ് അസുഖങ്ങൾക്കും ചികിത്സ ഉണ്ടോ?' },
+  { id: 'faq_delivery', title: '🚚 മരുന്ന് ഡെലിവറി', description: 'മരുന്ന് ഡെലിവറി ഉണ്ടോ?' },
 ];
 
 // The two rows that need a clinic to be picked before their answer.
