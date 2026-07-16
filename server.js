@@ -17,8 +17,8 @@ import { pathToFileURL } from 'node:url';
 import express from 'express';
 
 import { openDb } from './src/db.js';
-import { processMessage, STATES } from './src/stateMachine.js';
-import { sendMessage, isWithinSessionWindow } from './src/whatsapp.js';
+import { processMessage, STATES, isClinicalQuestion } from './src/stateMachine.js';
+import { sendMessage, isWithinSessionWindow, describe } from './src/whatsapp.js';
 import { assertClean } from './src/bannedWords.js';
 
 const WEBHOOK_PATHS = ['/webhook', '/whatsapp/webhook'];
@@ -97,6 +97,57 @@ export function extractMessages(payload) {
   return out;
 }
 
+// ── Message logging (admin-panel history) ────────────────────────────────────
+
+/** Map a normalised inbound message to the messages-table `type` enum. */
+function inboundType(msg) {
+  if (msg.buttonId) return 'button_reply';
+  if (msg.listId) return 'list_reply';
+  if (msg.type === 'interactive') return 'interactive';
+  return 'text';
+}
+
+/** A short human-readable body for the inbound log (title of a tap, or the text). */
+function inboundBody(msg) {
+  const t = String(msg.text || '').trim();
+  if (t) return t;
+  return msg.buttonId || msg.listId || '';
+}
+
+/** Log one inbound message to the permanent history. Best-effort: never throws. */
+function logInbound(db, msg, now) {
+  try {
+    db.logMessage({
+      phone: msg.from,
+      direction: 'in',
+      type: inboundType(msg),
+      body: inboundBody(msg),
+      raw_json: JSON.stringify(msg),
+      timestamp: msg.timestamp || now,
+    });
+  } catch (err) {
+    console.error(`messages: failed to log inbound for ${msg.from} — ${err.message}`);
+  }
+}
+
+/** Log one outbound send (bot reply) to the permanent history. Never throws. */
+function logOutbound(db, to, payload, now) {
+  try {
+    const type = payload.type === 'text' ? 'text' : 'interactive';
+    const body = payload.type === 'text' ? payload.text.body : describe(payload);
+    db.logMessage({
+      phone: to,
+      direction: 'out',
+      type,
+      body,
+      raw_json: JSON.stringify(payload),
+      timestamp: now,
+    });
+  } catch (err) {
+    console.error(`messages: failed to log outbound for ${to} — ${err.message}`);
+  }
+}
+
 // ── Core per-message handler (the imperative shell) ──────────────────────────
 
 /**
@@ -114,6 +165,10 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
     }
     db.markProcessed(msg.messageId, now);
   }
+
+  // Log every inbound to the permanent history (after dedup so duplicates are not
+  // double-logged; before every gate so dormant/agent-owned pings still appear).
+  logInbound(db, msg, now);
 
   // Load (or default) the conversation. Booking-first flow: any brand-new
   // phone number lands on WELCOME (Book/Doubt), not the old MENU greeting.
@@ -146,6 +201,29 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
       dormant_until: null,
       last_user_message_at: conv.last_user_message_at ?? null,
     };
+  }
+
+  // ── agent_owned gate (admin panel) ──
+  // A telecaller has taken over this thread. While agent_owned = 1 the bot must
+  // NOT auto-reply to free text — it stays silent (the inbound is already logged
+  // above). Two escape hatches:
+  //   1. The patient taps ANY interactive button/list row → the bot resumes
+  //      normally AND ownership is released (agent_owned reset to 0).
+  //   2. A safety/compliance guard (clinical escalation) still fires even while
+  //      agent-owned — a clinical question is never left silent.
+  if (conv.agent_owned) {
+    const isInteractive = !!msg.buttonId || !!msg.listId || msg.type === 'interactive';
+    if (isInteractive) {
+      db.setAgentOwned(msg.from, 0);        // release ownership, then fall through
+      conv = { ...conv, agent_owned: 0 };
+    } else if (!isClinicalQuestion(msg.text)) {
+      // Free text, not a clinical escalation → stay silent. Record the ping so the
+      // 24h window / last-seen stays accurate, but send nothing.
+      db.saveConversation(msg.from, { ...conv, last_user_message_at: now, updated_at: now });
+      console.log(`webhook: ${msg.from} is agent-owned — logged, not replying`);
+      return 'agent_owned';
+    }
+    // else: clinical question while agent-owned → fall through so the guard fires.
   }
 
   // ── Pure decision ──
@@ -182,6 +260,7 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
   for (const payload of r.replies) {
     if (payload.type === 'text') assertClean(payload.text.body, 'outbound'); // defence in depth
     await send(msg.from, payload);
+    logOutbound(db, msg.from, payload, now);  // permanent history (incl. MOCK_MODE)
   }
   return 'processed';
 }

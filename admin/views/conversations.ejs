@@ -1,0 +1,136 @@
+<%- include('partials/head', { active: 'conversations', user, bodyClass: selected ? 'viewing' : '' }) %>
+
+<div class="panes">
+
+  <!-- ── Left pane: conversation list ─────────────────────────────────── -->
+  <aside class="pane-list">
+    <div class="list-head">Conversations</div>
+    <% if (conversations.length === 0) { %>
+      <div class="empty-state" style="height:auto;padding:30px 16px;">No conversations yet.</div>
+    <% } %>
+    <% conversations.forEach(function (c) { %>
+      <a class="conv-item <%= c.phone === selected ? 'active' : '' %>" href="/admin/conv/<%= encodeURIComponent(c.phone) %>">
+        <div class="conv-row1">
+          <span class="conv-phone"><%= c.phone %></span>
+          <% if (Number(c.agent_owned)) { %><span class="badge badge-lock" title="Agent owns this thread">🔒</span><% } %>
+          <span class="badge badge-window <%= c.win.open ? 'badge-open' : 'badge-closed' %>"><%= c.win.open ? 'Open' : 'Closed' %></span>
+          <% if (Number(c.unread) > 0) { %><span class="badge badge-unread"><%= c.unread %></span><% } %>
+        </div>
+        <div class="conv-preview">
+          <% if (c.last_direction === 'out') { %><span class="out-mark">You:</span> <% } %><%= truncate(c.last_body, 46) %>
+        </div>
+        <div class="conv-time"><%= relativeTime(c.last_ts, now) %></div>
+      </a>
+    <% }) %>
+  </aside>
+
+  <!-- ── Right pane: thread + reply ───────────────────────────────────── -->
+  <section class="pane-view">
+    <% if (!selected) { %>
+      <div class="empty-state">Select a conversation on the left to view the thread.</div>
+    <% } else { %>
+      <div class="view-head">
+        <a class="back-link" href="/admin/">← Back</a>
+        <span class="vh-phone"><%= selected %></span>
+        <span class="badge badge-window <%= window.open ? 'badge-open' : 'badge-closed' %>"><%= window.open ? 'Window open' : 'Window closed' %></span>
+        <% if (agentOwned) { %><span class="badge badge-lock" title="Agent owns this thread">🔒 Agent</span><% } %>
+        <span class="spacer"></span>
+        <form method="post" action="/admin/release/<%= encodeURIComponent(selected) %>">
+          <button type="submit" class="btn btn-ghost" title="Hand this thread back to the bot">Release to bot</button>
+        </form>
+      </div>
+
+      <% if (err) { %><div class="flash-err"><%= err %></div><% } %>
+
+      <div class="thread" id="thread">
+        <% messages.forEach(function (m) { %>
+          <div class="bubble <%= m.direction === 'in' ? 'in' : 'out' %>">
+            <% if (m.type !== 'text') { %><span class="kind"><%= m.type.replace('_', ' ') %></span><br><% } %><%= m.body %>
+            <span class="meta"><%= clock(m.timestamp) %></span>
+          </div>
+        <% }) %>
+      </div>
+
+      <div class="reply-bar" id="replyBar">
+        <% if (window.open) { %>
+          <form method="post" action="/admin/reply" id="replyForm">
+            <input type="hidden" name="phone" value="<%= selected %>" />
+            <textarea name="text" id="replyText" placeholder="Type a reply…  (Enter to send, Shift+Enter for newline)" required></textarea>
+            <button type="submit" class="btn btn-send">Send</button>
+          </form>
+        <% } else { %>
+          <div class="reply-closed" id="closedNote">Window closed — patient must message first.</div>
+        <% } %>
+      </div>
+    <% } %>
+  </section>
+</div>
+
+<% if (selected) { %>
+<script>
+  (function () {
+    var PHONE = <%- JSON.stringify(selected) %>;
+    var thread = document.getElementById('thread');
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function clock(ts) {
+      var d = new Date(ts);
+      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+    function atBottom() {
+      return thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;
+    }
+    function scrollBottom() { thread.scrollTop = thread.scrollHeight; }
+
+    function renderBubble(m) {
+      var kind = m.type !== 'text'
+        ? '<span class="kind">' + esc(m.type.replace('_', ' ')) + '</span><br>' : '';
+      return '<div class="bubble ' + (m.direction === 'in' ? 'in' : 'out') + '">' +
+        kind + esc(m.body) +
+        '<span class="meta">' + clock(m.timestamp) + '</span></div>';
+    }
+
+    // First paint — jump to the newest message.
+    scrollBottom();
+
+    // Poll every 5s (no websockets). Re-render only when the count changes so we
+    // don't stomp the agent's scroll position or textarea while they type.
+    var lastCount = thread.querySelectorAll('.bubble').length;
+    async function poll() {
+      try {
+        var res = await fetch('/admin/conv/' + encodeURIComponent(PHONE) + '/messages', { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        var data = await res.json();
+        if (data.messages.length !== lastCount) {
+          var stick = atBottom();
+          thread.innerHTML = data.messages.map(renderBubble).join('');
+          lastCount = data.messages.length;
+          if (stick) scrollBottom();
+        }
+        // If the 24h window flipped shut while open, disable the composer.
+        if (!data.window.open && document.getElementById('replyForm')) {
+          document.getElementById('replyBar').innerHTML =
+            '<div class="reply-closed">Window closed — patient must message first.</div>';
+        }
+      } catch (e) { /* transient network error — try again next tick */ }
+    }
+    setInterval(poll, 5000);
+
+    // Enter-to-send (Shift+Enter = newline).
+    var ta = document.getElementById('replyText');
+    if (ta) {
+      ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (ta.value.trim()) ta.form.submit();
+        }
+      });
+    }
+  })();
+</script>
+<% } %>
+
+<%- include('partials/foot') %>

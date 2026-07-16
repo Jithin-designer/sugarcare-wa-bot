@@ -4,8 +4,13 @@
 .env.*
 !.env.example
 
-# Runtime data (SQLite db + mock outbox)
+# Runtime data (SQLite db + mock outbox). `data/` already covers everything
+# below; the explicit db entries are listed too for belt-and-suspenders safety
+# (the WAL/SHM sidecar files created by journal_mode=WAL must never be committed).
 data/
+data/bot.db
+data/bot.db-wal
+data/bot.db-shm
 
 # Dependencies
 node_modules/

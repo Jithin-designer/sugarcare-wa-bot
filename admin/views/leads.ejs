@@ -1,0 +1,39 @@
+<%- include('partials/head', { active: 'leads', user, bodyClass: '' }) %>
+
+<div class="page-pad">
+  <h1 class="page-title">Leads</h1>
+
+  <div class="table-wrap">
+    <table class="leads">
+      <thead>
+        <tr>
+          <th>Phone</th>
+          <th>Name</th>
+          <th>Clinic</th>
+          <th>Interest</th>
+          <th>Type</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (leads.length === 0) { %>
+          <tr><td colspan="6" style="text-align:center;color:var(--grey-text);padding:26px;">No leads yet.</td></tr>
+        <% } %>
+        <% leads.forEach(function (l) { %>
+          <tr>
+            <td><%= l.phone %></td>
+            <td><%= l.name || '—' %></td>
+            <td><%= l.clinic || '—' %></td>
+            <td><%= l.interest || '—' %></td>
+            <td>
+              <span class="pill <%= Number(l.priority) ? 'prio' : '' %>"><%= l.lead_type %></span>
+            </td>
+            <td><%= new Date(l.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

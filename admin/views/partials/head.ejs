@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>SugarCARE · Telecaller Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Noto+Sans+Malayalam:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/admin/static/style.css" />
+</head>
+<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>">
+  <header class="app-header">
+    <span class="brand">SugarCARE<span class="dot">·</span>Panel</span>
+    <nav>
+      <a href="/admin/" class="<%= active === 'conversations' ? 'active' : '' %>">Conversations</a>
+      <a href="/admin/leads" class="<%= active === 'leads' ? 'active' : '' %>">Leads</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="who">
+      <%= user.username %> (<%= user.role %>)
+      <a class="logout" href="/admin/logout">Log out</a>
+    </span>
+  </header>
