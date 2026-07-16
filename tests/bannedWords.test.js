@@ -12,10 +12,12 @@ import { fileURLToPath } from 'node:url';
 
 import { findBannedWords, BANNED_WORDS } from '../src/bannedWords.js';
 import {
-  allStrings, menu, interestList, leadClinicList, patientMenu, apptClinicList, fallbackReprompt,
-  welcome, bookingClinicList, bookingNameBody, bookingConfirm, qaPrompt, qaAnswer, qaRedirectPersonal,
-  midBookingBriefAnswer, closingLoop, closingBye,
+  allStrings, welcome, bookingClinicList, bookingConfirm, medicineClinicList, medicineConfirm,
+  faqList, faqAnswer, faqClinicPicker, faqLocationAnswer, faqTimingAnswer,
+  doctorRedirect, fallbackReprompt, fallbackHandoff,
+  CLINICS,
 } from '../src/messages.js';
+import { FAQ_ROWS } from '../src/content/faq.ml.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = path.resolve(__dirname, '../src');
@@ -30,24 +32,27 @@ describe('messages.js reply strings', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('has no banned words in any rendered payload', () => {
-    // Render every screen builder in both languages and scan the flattened text.
-    const payloads = [];
-    for (const lang of ['ml', 'en']) {
-      payloads.push(
-        menu(lang), interestList(lang), leadClinicList(lang), patientMenu(lang), apptClinicList(lang),
-        ...fallbackReprompt(lang),
-        // Booking-first flow (feature/booking-first-flow)
-        welcome(lang), bookingClinicList(lang), bookingNameBody(lang),
-        bookingConfirm(lang, 'Test Name', 'edappal'),
-        qaPrompt(lang),
-        ...qaAnswer(lang, 'diet'), ...qaAnswer(lang, 'exercise'), ...qaAnswer(lang, 'monitoring'), ...qaAnswer(lang, 'hba1c'),
-        ...qaAnswer(lang, null), // qa_redirect_unknown branch
-        ...qaRedirectPersonal(lang),
-        ...midBookingBriefAnswer(lang, 'diet', bookingClinicList(lang)),
-        ...midBookingBriefAnswer(lang, 'personal', bookingNameBody(lang)),
-        closingLoop(lang), closingBye(lang)
-      );
+  it('has no banned words in any rendered payload (FAQ-list flow)', () => {
+    // Render every screen builder and scan the flattened text.
+    const payloads = [
+      welcome(),
+      bookingClinicList(), bookingConfirm('edappal'),
+      medicineClinicList(), medicineConfirm(),
+      faqList(),
+      faqClinicPicker(),
+      ...doctorRedirect(),
+      ...fallbackReprompt(),
+      ...fallbackHandoff(),
+    ];
+    // Every one-step FAQ answer.
+    for (const row of FAQ_ROWS) {
+      if (row.id === 'faq_location' || row.id === 'faq_timing') continue;
+      payloads.push(...faqAnswer(row.id));
+    }
+    // Every per-clinic location + timing answer.
+    for (const c of CLINICS) {
+      payloads.push(...faqLocationAnswer(c.id));
+      payloads.push(...faqTimingAnswer(c.id));
     }
     const texts = JSON.stringify(payloads);
     expect(findBannedWords(texts)).toEqual([]);

@@ -164,11 +164,11 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
   });
   if (r.leadData) {
     db.saveLead({ ...r.leadData, created_at: now });
-    // Booking-first flow: extra console visibility in MOCK_MODE (the lead is
-    // ALSO always written to SQLite above — see BOOKING-FLOW-CHANGES.md for
-    // why this doesn't skip the DB write the way the original brief phrased it).
-    if (r.leadData.lead_type === 'booking' && isMockEnv()) {
-      console.log(`[MOCK LEAD] booking: phone=${r.leadData.phone} name=${r.leadData.name} clinic=${r.leadData.clinic}`);
+    // FAQ-list flow: extra console visibility in MOCK_MODE for the two lead
+    // types the new flow produces (booking + medicine). The lead is ALSO always
+    // written to SQLite above — this log never skips the DB write.
+    if ((r.leadData.lead_type === 'booking' || r.leadData.lead_type === 'medicine') && isMockEnv()) {
+      console.log(`[MOCK LEAD] ${r.leadData.lead_type}: phone=${r.leadData.phone} clinic=${r.leadData.clinic}`);
     }
   }
 
