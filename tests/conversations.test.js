@@ -1,7 +1,7 @@
 /**
  * conversations.test.js — full end-to-end walkthroughs through the imperative
- * shell (handleIncoming), asserting the resulting rows in SQLite. This is the
- * closest thing to "a real WhatsApp conversation" without the network.
+ * shell (handleIncoming), asserting the resulting rows in SQLite. The closest
+ * thing to "a real WhatsApp conversation" without the network. FAQ-flow rebuild.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -25,59 +25,49 @@ beforeEach(() => {
   seq = 0;
 });
 
-// helpers to feed one inbound at a time with unique message ids
 const from = '919812345678';
 const feed = (partial) => handleIncoming({ db, send }, {
   from, messageId: `wamid.T${++seq}`, timestamp: Date.now(),
   type: 'text', text: '', buttonId: null, listId: null, ...partial,
 });
 const text = (t) => feed({ type: 'text', text: t });
-const button = (id) => feed({ type: 'interactive', buttonId: id });
 const list = (id) => feed({ type: 'interactive', listId: id });
+const button = (id) => feed({ type: 'interactive', buttonId: id });
 
-describe('full booking-first walkthrough', () => {
-  it('captures a booking lead with name and clinic (WELCOME → Book cheyyam)', async () => {
+describe('booking walkthrough (WELCOME → book → clinic, no name step)', () => {
+  it('captures a booking lead with clinic and no name, resets to WELCOME', async () => {
     await text('namaskaram');            // → WELCOME, greeted
-    await button(IDS.BTN_BOOK);          // → CLINIC_SELECT
-    await list(clinicRowId('chemmad'));  // → NAME_CAPTURE
-    await text('Fathima');               // → BOOKING_COMPLETE + lead saved
+    await list(IDS.BTN_BOOK);            // → CLINIC_SELECT
+    await list(clinicRowId('chemmad')); // → booking lead saved, back to WELCOME
 
     const leads = db.leadsForPhone(from);
     expect(leads).toHaveLength(1);
-    expect(leads[0]).toMatchObject({
-      name: 'Fathima', clinic: 'chemmad', lead_type: 'booking', priority: 0,
-    });
-
-    const c = db.getConversation(from);
-    expect(c.state).toBe(STATES.BOOKING_COMPLETE);
+    expect(leads[0]).toMatchObject({ clinic: 'chemmad', lead_type: 'booking', priority: 0, name: null });
+    expect(db.getConversation(from).state).toBe(STATES.WELCOME);
   });
 });
 
-describe('existing-patient report request (WELCOME → talk to team bridge)', () => {
-  it('creates a PRIORITY lead and hands off', async () => {
-    await text('hello');                    // → WELCOME, greeted
-    await button(IDS.BTN_TALK_TO_TEAM);      // → PATIENT_MENU (old flow, kept intact)
-    await button(IDS.BTN_REPORT);
+describe('medicine walkthrough (WELCOME → medicine → clinic, no name step)', () => {
+  it('captures a medicine lead with clinic and no name', async () => {
+    await text('hi');
+    await list(IDS.BTN_MEDS);
+    await list(clinicRowId('punnayurkulam'));
 
     const leads = db.leadsForPhone(from);
     expect(leads).toHaveLength(1);
-    expect(leads[0]).toMatchObject({ priority: 1, lead_type: 'priority', interest: 'report' });
-    expect(db.getConversation(from).state).toBe(STATES.HUMAN_HANDOFF);
+    expect(leads[0]).toMatchObject({ clinic: 'punnayurkulam', lead_type: 'medicine', name: null });
   });
 });
 
 describe('dormancy gating', () => {
   it('ignores inbound messages while the conversation is dormant', async () => {
-    // Drive to a dormant close via the booking-complete → closing-loop → No path.
+    // Drive to a dormant close via two-strike fallback.
     await text('hi');
-    await button(IDS.BTN_BOOK);
-    await list(clinicRowId('kanjirathani'));
-    await text('Ramesh');
-    const closingSends = sends.length;
-    await button(IDS.BTN_CLOSING_NO); // → DORMANT for 12h
+    await button('nope_1');   // 1st miss → re-prompt
+    await button('nope_2');   // 2nd miss → HUMAN_HANDOFF + dormant 12h
 
+    expect(db.getConversation(from).state).toBe(STATES.HUMAN_HANDOFF);
     const sentSoFar = sends.length;
-    expect(sentSoFar).toBeGreaterThan(closingSends);
 
     // A follow-up ping during dormancy must be logged, not answered.
     const status = await text('are you there?');
@@ -96,16 +86,15 @@ describe('clinical question end-to-end', () => {
   });
 });
 
-describe('two-strike fallback', () => {
+describe('two-strike fallback (threshold 1)', () => {
   it('re-prompts once, then hands off on the second miss', async () => {
-    await text('hi');                    // greet, state WELCOME greeted
-    const s1 = await button('nope_1');   // 1st miss → re-prompt
+    await text('hi');
+    const s1 = await button('nope_1');
     expect(s1).toBe('processed');
     expect(db.getConversation(from).fallback_count).toBe(1);
 
-    await button('nope_2');              // 2nd miss → handoff
+    await button('nope_2');
     expect(db.getConversation(from).state).toBe(STATES.HUMAN_HANDOFF);
-    const leads = db.leadsForPhone(from);
-    expect(leads.some((l) => l.lead_type === 'fallback')).toBe(true);
+    expect(db.leadsForPhone(from).some((l) => l.lead_type === 'fallback')).toBe(true);
   });
 });
