@@ -34,6 +34,15 @@ export function createAdminApp({ db, send = sendMessage } = {}) {
   seedUsers(db);
 
   const app = express();
+
+  // Behind nginx (the panel binds to 127.0.0.1 and nginx proxies /admin/ to it).
+  // Trust exactly ONE proxy hop so req.ip is the real client IP from the last
+  // X-Forwarded-For entry nginx set — without this, express-rate-limit throws
+  // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. Deliberately `1`, not `true`: trusting
+  // all hops would let a client spoof X-Forwarded-For and rotate fake IPs to
+  // bypass the login rate limiter.
+  app.set('trust proxy', 1);
+
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
 
