@@ -13,7 +13,9 @@
  */
 
 import crypto from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 
 import { openDb } from './src/db.js';
@@ -324,11 +326,37 @@ export function createApp({ db, send = sendMessage } = {}) {
 
 // ── Boot (only when run directly, not when imported by tests) ─────────────────
 
-// Robust "is this the entry module?" check — pathToFileURL matches the
-// percent-encoding of import.meta.url, so it works even when the project path
-// contains spaces (e.g. ".../Jithin works/SugarCARE Clinics.../").
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+/**
+ * Is this module the process entrypoint?
+ *
+ * The naive check `import.meta.url === pathToFileURL(process.argv[1]).href`
+ * breaks under pm2 on a real deploy: Node resolves symlinks in `import.meta.url`
+ * (so it points at the real release dir), but `process.argv[1]` is whatever path
+ * pm2 was given — typically a RELATIVE path (`pm2 start server.js`) under a
+ * symlinked app dir (`/var/www/... -> releases/x`). The two strings then differ,
+ * the boot block silently never runs, and the server listens on nothing while
+ * logging nothing. (This is the same latent bug that took the admin panel down.)
+ *
+ * Fix: compare after resolving BOTH sides through realpath (symlink-safe) and to
+ * absolute paths (relative-arg-safe). `BOT_FORCE_START=1` is an explicit escape
+ * hatch for any launcher that still trips this.
+ */
+function isEntrypoint() {
+  if (String(process.env.BOT_FORCE_START ?? '') === '1') return true;
+  const arg = process.argv[1];
+  if (!arg) return false;
+  try {
+    const here = fs.realpathSync(fileURLToPath(import.meta.url));
+    const invoked = fs.realpathSync(path.resolve(arg));
+    return here === invoked;
+  } catch {
+    // realpath throws only if a path vanished mid-start — fall back to the
+    // percent-encoding-safe string compare rather than refusing to boot.
+    return import.meta.url === pathToFileURL(path.resolve(arg)).href;
+  }
+}
+
+if (isEntrypoint()) {
   const db = openDb(process.env.DB_PATH || 'data/bot.db');
   const app = createApp({ db });
   const port = Number(process.env.PORT || 3000);

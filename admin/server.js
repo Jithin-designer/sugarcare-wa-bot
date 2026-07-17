@@ -10,6 +10,7 @@
  * keeps the two processes decoupled: deleting this panel cannot affect the bot.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
@@ -188,10 +189,40 @@ function fail(res, wantsJson, phone, message, status) {
   return res.redirect(q);
 }
 
-// ── Boot (only when run directly) ────────────────────────────────────────────
+// ── Boot (only when run directly, not when imported by tests) ────────────────
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+/**
+ * Is this module the process entrypoint?
+ *
+ * The naive check `import.meta.url === pathToFileURL(process.argv[1]).href`
+ * breaks under pm2 on a real deploy: Node resolves symlinks in `import.meta.url`
+ * (so it points at the real release dir), but `process.argv[1]` is whatever path
+ * pm2 was given — typically a RELATIVE path (`pm2 start admin/server.js`, as our
+ * DEPLOY.md instructs) under a symlinked app dir (`/var/www/... -> releases/x`).
+ * The two strings then differ, `isMain` is false, and the boot block silently
+ * never runs: the process starts, exits clean, listens on nothing, logs nothing
+ * — exactly the "under pm2 but not on :3010, empty logs" symptom.
+ *
+ * Fix: compare the two after resolving BOTH through realpath (symlink-safe) and
+ * to absolute paths (relative-arg-safe). `ADMIN_FORCE_START=1` is an explicit
+ * escape hatch for any launcher that still trips this.
+ */
+function isEntrypoint() {
+  if (String(process.env.ADMIN_FORCE_START ?? '') === '1') return true;
+  const arg = process.argv[1];
+  if (!arg) return false;
+  try {
+    const here = fs.realpathSync(fileURLToPath(import.meta.url));
+    const invoked = fs.realpathSync(path.resolve(arg));
+    return here === invoked;
+  } catch {
+    // realpath throws only if a path vanished mid-start — fall back to the
+    // percent-encoding-safe string compare rather than refusing to boot.
+    return import.meta.url === pathToFileURL(path.resolve(arg)).href;
+  }
+}
+
+if (isEntrypoint()) {
   const db = openAdminDb();
   const app = createAdminApp({ db });
   const port = Number(process.env.ADMIN_PORT || 3010);
