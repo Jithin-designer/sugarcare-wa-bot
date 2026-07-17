@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SugarCARE · Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Noto+Sans+Malayalam:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/admin/static/style.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" method="post" action="/admin/login" autocomplete="off">
+      <div class="brand">SugarCARE<span class="dot">·</span>Panel</div>
+      <div class="sub">Telecaller sign in</div>
+
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" required autofocus />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required />
+
+      <button type="submit">Sign in</button>
+
+      <% if (error) { %>
+        <div class="login-err"><%= error %></div>
+      <% } %>
+    </form>
+  </div>
+</body>
+</html>

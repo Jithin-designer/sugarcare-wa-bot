@@ -43,6 +43,21 @@ CREATE TABLE IF NOT EXISTS processed_messages (
   message_id TEXT PRIMARY KEY,
   processed_at INTEGER NOT NULL
 );
+
+-- Admin-panel message log (additive). Every inbound message and every outbound
+-- send (bot OR telecaller, MOCK included) is appended here. History is permanent
+-- — nothing purges this table. Read by the admin panel's conversation view.
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('in','out')),
+  type TEXT NOT NULL CHECK (type IN ('text','interactive','button_reply','list_reply')),
+  body TEXT NOT NULL,
+  raw_json TEXT,
+  timestamp INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_phone ON messages(phone);
+CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 `;
 
 /**
@@ -58,6 +73,7 @@ export function openDb(filename = 'data/bot.db') {
   const db = new Database(filename);
   db.pragma('journal_mode = WAL');   // better concurrency for a long-running server
   db.exec(SCHEMA);
+  ensureColumn(db, 'conversations', 'agent_owned', 'INTEGER DEFAULT 0');
 
   // ── prepared statements (compiled once, reused per call) ───────────────────
   const stmts = {
@@ -85,6 +101,12 @@ export function openDb(filename = 'data/bot.db') {
       'INSERT OR IGNORE INTO processed_messages (message_id, processed_at) VALUES (?, ?)'
     ),
     leadsForPhone: db.prepare('SELECT * FROM leads WHERE phone = ? ORDER BY id DESC'),
+    insertMessage: db.prepare(`
+      INSERT INTO messages (phone, direction, type, body, raw_json, timestamp)
+      VALUES (@phone, @direction, @type, @body, @raw_json, @timestamp)
+    `),
+    messagesForPhone: db.prepare('SELECT * FROM messages WHERE phone = ? ORDER BY timestamp ASC, id ASC'),
+    setAgentOwned: db.prepare('UPDATE conversations SET agent_owned = @agent_owned WHERE phone = @phone'),
   };
 
   return {
@@ -146,6 +168,30 @@ export function openDb(filename = 'data/bot.db') {
       return stmts.leadsForPhone.all(phone);
     },
 
+    /**
+     * Append one message to the permanent `messages` log (admin panel history).
+     * Used for BOTH inbound (direction:'in') and every outbound send
+     * (direction:'out'), including MOCK_MODE. Never purged.
+     */
+    logMessage({ phone, direction, type, body, raw_json = null, timestamp = Date.now() }) {
+      const info = stmts.insertMessage.run({ phone, direction, type, body, raw_json, timestamp });
+      return info.lastInsertRowid;
+    },
+
+    /** All logged messages for a phone, oldest-first (thread order). */
+    messagesForPhone(phone) {
+      return stmts.messagesForPhone.all(phone);
+    },
+
+    /**
+     * Set the agent_owned flag on a conversation (1 = a human telecaller owns the
+     * thread and the bot stays silent to free text; 0 = bot handles normally).
+     * No-op if the conversation row does not exist yet.
+     */
+    setAgentOwned(phone, agent_owned) {
+      stmts.setAgentOwned.run({ phone, agent_owned: agent_owned ? 1 : 0 });
+    },
+
     close() {
       db.close();
     },
@@ -158,4 +204,15 @@ function safeParse(json) {
   } catch {
     return {};
   }
+}
+
+/**
+ * Additive column migration. SQLite's ALTER TABLE ADD COLUMN throws if the
+ * column already exists, so we probe PRAGMA table_info first. Idempotent — safe
+ * to run on every boot against an already-migrated production database.
+ */
+function ensureColumn(db, table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }

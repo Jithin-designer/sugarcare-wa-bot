@@ -1,0 +1,328 @@
+/* SugarCARE admin panel — working tool, brand accents ≤10%, white dominant. */
+
+:root {
+  --purple: #4A2FA0;
+  --orange: #E86A1A;
+  --ink: #1A0E50;
+  --grey-bubble: #EEF0F4;
+  --grey-line: #E3E6ED;
+  --grey-text: #6B7280;
+  --bg: #FFFFFF;
+  --bg-soft: #F7F8FB;
+  --green: #1E874B;
+  --green-soft: #E3F5EA;
+  --radius: 12px;
+  --font: 'Plus Jakarta Sans', 'Noto Sans Malayalam', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg-soft);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.app-header {
+  background: var(--purple);
+  border-bottom: 2.5px solid var(--orange);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.app-header .brand {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-header .brand .dot { color: var(--orange); }
+.app-header nav { display: flex; gap: 6px; }
+.app-header nav a {
+  color: #fff;
+  text-decoration: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.app-header nav a.active { background: rgba(255,255,255,0.16); opacity: 1; }
+.app-header nav a:hover { opacity: 1; }
+.app-header .spacer { flex: 1; }
+.app-header .who { font-size: 13px; opacity: 0.9; }
+.app-header .who .logout { color: #fff; margin-left: 10px; opacity: 0.8; }
+
+/* ── Two-pane layout ────────────────────────────────────────────────────── */
+
+.panes {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: calc(100vh - 57px);   /* header (12+12 pad + text) + 2.5px orange rule */
+  overflow: hidden;             /* each pane scrolls internally, not the page */
+}
+
+.pane-list {
+  background: var(--bg);
+  border-right: 1px solid var(--grey-line);
+  overflow-y: auto;
+  min-height: 0;
+}
+.pane-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;                /* let .thread own the scroll (flexbox min-height:auto fix) */
+  background: var(--bg-soft);
+}
+
+/* ── Conversation list ──────────────────────────────────────────────────── */
+
+.list-head {
+  padding: 14px 16px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--grey-text);
+}
+.conv-item {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--grey-line);
+  cursor: pointer;
+}
+.conv-item:hover { background: var(--bg-soft); }
+.conv-item.active { background: #F0ECFA; box-shadow: inset 3px 0 0 var(--purple); }
+.conv-row1 { display: flex; align-items: center; gap: 8px; }
+.conv-phone { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
+.conv-time { font-size: 11px; color: var(--grey-text); white-space: nowrap; }
+.conv-preview {
+  font-size: 13px;
+  color: var(--grey-text);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conv-preview .out-mark { color: var(--purple); font-weight: 600; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  line-height: 1;
+}
+.badge-unread { background: var(--orange); color: #fff; min-width: 18px; height: 18px; padding: 0 5px; }
+.badge-lock { font-size: 12px; }
+.badge-window { padding: 2px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.badge-open { background: var(--green-soft); color: var(--green); }
+.badge-closed { background: var(--grey-bubble); color: var(--grey-text); }
+
+/* ── Thread ─────────────────────────────────────────────────────────────── */
+
+.view-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--grey-line);
+}
+.view-head .vh-phone { font-weight: 700; font-size: 15px; }
+.view-head .spacer { flex: 1; }
+.view-head form { margin: 0; }
+
+.btn {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.btn-ghost { background: var(--grey-bubble); color: var(--ink); }
+.btn-ghost:hover { background: #E1E4EC; }
+.btn-send { background: var(--orange); color: #fff; }
+.btn-send:hover { filter: brightness(0.95); }
+.btn-send:disabled { background: var(--grey-bubble); color: var(--grey-text); cursor: not-allowed; }
+
+.thread {
+  flex: 1;
+  min-height: 0;                /* required so overflow-y actually scrolls inside the flex column */
+  overflow-y: auto;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bubble {
+  max-width: 74%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.bubble .meta { display: block; font-size: 10px; margin-top: 4px; opacity: 0.65; }
+.bubble.in {
+  align-self: flex-start;
+  background: var(--grey-bubble);
+  color: var(--ink);
+  border-bottom-left-radius: 4px;
+}
+.bubble.out {
+  align-self: flex-end;
+  background: var(--purple);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.bubble.out .meta { color: #fff; }
+.bubble .kind { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+
+/* ── Reply box ──────────────────────────────────────────────────────────── */
+
+.reply-bar {
+  border-top: 1px solid var(--grey-line);
+  background: var(--bg);
+  padding: 12px 16px;
+}
+.reply-bar form { display: flex; gap: 10px; align-items: flex-end; margin: 0; }
+.reply-bar textarea {
+  flex: 1;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--ink);
+  border: 1px solid var(--grey-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: none;
+  min-height: 44px;
+  max-height: 140px;
+  line-height: 1.4;
+}
+.reply-bar textarea:focus { outline: 2px solid var(--purple); border-color: transparent; }
+.reply-closed {
+  text-align: center;
+  color: var(--grey-text);
+  font-size: 13px;
+  padding: 14px;
+  background: var(--grey-bubble);
+  border-radius: 10px;
+}
+.flash-err {
+  background: #FDECEC;
+  color: #B23B3B;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 0 16px 10px;
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey-text);
+  font-size: 15px;
+  text-align: center;
+  padding: 40px;
+}
+
+/* ── Leads table ────────────────────────────────────────────────────────── */
+
+.page-pad { padding: 22px; }
+.page-title { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
+.table-wrap { overflow-x: auto; background: var(--bg); border: 1px solid var(--grey-line); border-radius: var(--radius); }
+table.leads { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.leads th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--grey-text);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--grey-line);
+  background: var(--bg-soft);
+}
+table.leads td { padding: 11px 14px; border-bottom: 1px solid var(--grey-line); }
+table.leads tr:last-child td { border-bottom: none; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--grey-bubble); color: var(--ink); }
+.pill.prio { background: #FCE8DA; color: var(--orange); }
+
+/* ── Login ──────────────────────────────────────────────────────────────── */
+
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-card {
+  background: var(--bg);
+  width: 100%;
+  max-width: 360px;
+  border-radius: 16px;
+  border-top: 3px solid var(--orange);
+  box-shadow: 0 12px 40px rgba(26,14,80,0.12);
+  padding: 30px 28px;
+}
+.login-card .brand { font-weight: 800; font-size: 20px; color: var(--purple); margin-bottom: 4px; }
+.login-card .brand .dot { color: var(--orange); }
+.login-card .sub { color: var(--grey-text); font-size: 13px; margin-bottom: 22px; }
+.login-card label { display: block; font-size: 12px; font-weight: 600; margin: 12px 0 5px; }
+.login-card input {
+  width: 100%;
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 11px 12px;
+  border: 1px solid var(--grey-line);
+  border-radius: 10px;
+}
+.login-card input:focus { outline: 2px solid var(--purple); border-color: transparent; }
+.login-card button {
+  width: 100%;
+  margin-top: 20px;
+  background: var(--purple);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+}
+.login-card button:hover { filter: brightness(1.05); }
+.login-err { background: #FDECEC; color: #B23B3B; font-size: 13px; padding: 9px 12px; border-radius: 8px; margin-top: 14px; }
+
+/* ── Mobile: stack the panes, big tap targets ───────────────────────────── */
+
+@media (max-width: 720px) {
+  .panes { grid-template-columns: 1fr; height: calc(100vh - 55px); }
+  /* On a phone we show ONE pane at a time. The list is the default; opening a
+     conversation adds ?view and hides the list via the body class below. */
+  body.viewing .pane-list { display: none; }
+  body:not(.viewing) .pane-view { display: none; }
+  .conv-item { padding: 15px 16px; }        /* larger tap targets */
+  .app-header nav a { padding: 9px 14px; }
+  /* Higher specificity than the base rule below so it wins regardless of source
+     order — the back link only appears in the single-pane conversation view. */
+  body.viewing .back-link { display: inline-flex; }
+}
+.back-link { display: none; align-items: center; gap: 6px; color: var(--purple); text-decoration: none; font-weight: 700; font-size: 14px; margin-right: 4px; }

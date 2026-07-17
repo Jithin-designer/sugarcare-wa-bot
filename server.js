@@ -13,12 +13,14 @@
  */
 
 import crypto from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 
 import { openDb } from './src/db.js';
-import { processMessage, STATES } from './src/stateMachine.js';
-import { sendMessage, isWithinSessionWindow } from './src/whatsapp.js';
+import { processMessage, STATES, isClinicalQuestion } from './src/stateMachine.js';
+import { sendMessage, isWithinSessionWindow, describe } from './src/whatsapp.js';
 import { assertClean } from './src/bannedWords.js';
 
 const WEBHOOK_PATHS = ['/webhook', '/whatsapp/webhook'];
@@ -97,6 +99,57 @@ export function extractMessages(payload) {
   return out;
 }
 
+// ── Message logging (admin-panel history) ────────────────────────────────────
+
+/** Map a normalised inbound message to the messages-table `type` enum. */
+function inboundType(msg) {
+  if (msg.buttonId) return 'button_reply';
+  if (msg.listId) return 'list_reply';
+  if (msg.type === 'interactive') return 'interactive';
+  return 'text';
+}
+
+/** A short human-readable body for the inbound log (title of a tap, or the text). */
+function inboundBody(msg) {
+  const t = String(msg.text || '').trim();
+  if (t) return t;
+  return msg.buttonId || msg.listId || '';
+}
+
+/** Log one inbound message to the permanent history. Best-effort: never throws. */
+function logInbound(db, msg, now) {
+  try {
+    db.logMessage({
+      phone: msg.from,
+      direction: 'in',
+      type: inboundType(msg),
+      body: inboundBody(msg),
+      raw_json: JSON.stringify(msg),
+      timestamp: msg.timestamp || now,
+    });
+  } catch (err) {
+    console.error(`messages: failed to log inbound for ${msg.from} — ${err.message}`);
+  }
+}
+
+/** Log one outbound send (bot reply) to the permanent history. Never throws. */
+function logOutbound(db, to, payload, now) {
+  try {
+    const type = payload.type === 'text' ? 'text' : 'interactive';
+    const body = payload.type === 'text' ? payload.text.body : describe(payload);
+    db.logMessage({
+      phone: to,
+      direction: 'out',
+      type,
+      body,
+      raw_json: JSON.stringify(payload),
+      timestamp: now,
+    });
+  } catch (err) {
+    console.error(`messages: failed to log outbound for ${to} — ${err.message}`);
+  }
+}
+
 // ── Core per-message handler (the imperative shell) ──────────────────────────
 
 /**
@@ -114,6 +167,10 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
     }
     db.markProcessed(msg.messageId, now);
   }
+
+  // Log every inbound to the permanent history (after dedup so duplicates are not
+  // double-logged; before every gate so dormant/agent-owned pings still appear).
+  logInbound(db, msg, now);
 
   // Load (or default) the conversation. Booking-first flow: any brand-new
   // phone number lands on WELCOME (Book/Doubt), not the old MENU greeting.
@@ -146,6 +203,29 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
       dormant_until: null,
       last_user_message_at: conv.last_user_message_at ?? null,
     };
+  }
+
+  // ── agent_owned gate (admin panel) ──
+  // A telecaller has taken over this thread. While agent_owned = 1 the bot must
+  // NOT auto-reply to free text — it stays silent (the inbound is already logged
+  // above). Two escape hatches:
+  //   1. The patient taps ANY interactive button/list row → the bot resumes
+  //      normally AND ownership is released (agent_owned reset to 0).
+  //   2. A safety/compliance guard (clinical escalation) still fires even while
+  //      agent-owned — a clinical question is never left silent.
+  if (conv.agent_owned) {
+    const isInteractive = !!msg.buttonId || !!msg.listId || msg.type === 'interactive';
+    if (isInteractive) {
+      db.setAgentOwned(msg.from, 0);        // release ownership, then fall through
+      conv = { ...conv, agent_owned: 0 };
+    } else if (!isClinicalQuestion(msg.text)) {
+      // Free text, not a clinical escalation → stay silent. Record the ping so the
+      // 24h window / last-seen stays accurate, but send nothing.
+      db.saveConversation(msg.from, { ...conv, last_user_message_at: now, updated_at: now });
+      console.log(`webhook: ${msg.from} is agent-owned — logged, not replying`);
+      return 'agent_owned';
+    }
+    // else: clinical question while agent-owned → fall through so the guard fires.
   }
 
   // ── Pure decision ──
@@ -182,6 +262,7 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
   for (const payload of r.replies) {
     if (payload.type === 'text') assertClean(payload.text.body, 'outbound'); // defence in depth
     await send(msg.from, payload);
+    logOutbound(db, msg.from, payload, now);  // permanent history (incl. MOCK_MODE)
   }
   return 'processed';
 }
@@ -245,11 +326,37 @@ export function createApp({ db, send = sendMessage } = {}) {
 
 // ── Boot (only when run directly, not when imported by tests) ─────────────────
 
-// Robust "is this the entry module?" check — pathToFileURL matches the
-// percent-encoding of import.meta.url, so it works even when the project path
-// contains spaces (e.g. ".../Jithin works/SugarCARE Clinics.../").
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+/**
+ * Is this module the process entrypoint?
+ *
+ * The naive check `import.meta.url === pathToFileURL(process.argv[1]).href`
+ * breaks under pm2 on a real deploy: Node resolves symlinks in `import.meta.url`
+ * (so it points at the real release dir), but `process.argv[1]` is whatever path
+ * pm2 was given — typically a RELATIVE path (`pm2 start server.js`) under a
+ * symlinked app dir (`/var/www/... -> releases/x`). The two strings then differ,
+ * the boot block silently never runs, and the server listens on nothing while
+ * logging nothing. (This is the same latent bug that took the admin panel down.)
+ *
+ * Fix: compare after resolving BOTH sides through realpath (symlink-safe) and to
+ * absolute paths (relative-arg-safe). `BOT_FORCE_START=1` is an explicit escape
+ * hatch for any launcher that still trips this.
+ */
+function isEntrypoint() {
+  if (String(process.env.BOT_FORCE_START ?? '') === '1') return true;
+  const arg = process.argv[1];
+  if (!arg) return false;
+  try {
+    const here = fs.realpathSync(fileURLToPath(import.meta.url));
+    const invoked = fs.realpathSync(path.resolve(arg));
+    return here === invoked;
+  } catch {
+    // realpath throws only if a path vanished mid-start — fall back to the
+    // percent-encoding-safe string compare rather than refusing to boot.
+    return import.meta.url === pathToFileURL(path.resolve(arg)).href;
+  }
+}
+
+if (isEntrypoint()) {
   const db = openDb(process.env.DB_PATH || 'data/bot.db');
   const app = createApp({ db });
   const port = Number(process.env.PORT || 3000);
