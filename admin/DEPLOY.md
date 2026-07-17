@@ -71,23 +71,18 @@ the panel reads the same file.
 # Session cookie signing secret — long random string (e.g. `openssl rand -hex 32`)
 ADMIN_SESSION_SECRET=<long-random-string>
 
-# Seed passwords (used ONCE on first boot, then stored bcrypt-hashed).
-ADMIN_SEED_PASSWORD_NITHIN=<password for nithin>
-ADMIN_SEED_PASSWORD_ALEENA=<password for aleena>
-ADMIN_SEED_PASSWORD_JITHIN=<password for jithin>
-
 # Optional — defaults to 3010.
 # ADMIN_PORT=3010
 ```
 
-Seeding is idempotent: once a user exists, its stored hash is never overwritten,
-so changing an `ADMIN_SEED_PASSWORD_*` value later has **no effect** on an
-already-seeded user. To rotate a password, update the hash in the DB directly or
-delete that `admin_users` row and restart.
-
-In production, a missing `ADMIN_SEED_PASSWORD_*` means that user is **not
-seeded** (no guessable default). A missing `ADMIN_SESSION_SECRET` logs an error
-and falls back to an insecure value — always set it.
+The three default users (`nithin`, `aleena`, and `jithin`) are initialized with
+password `1234`; only bcrypt hashes are stored. On startup, legacy hashes created
+by the old environment-driven seeder are repaired to this documented default
+once. The completed migration is recorded in `admin_meta`, so later password
+changes are not overwritten on restart. Change these passwords after the first
+successful login in any production deployment. A missing
+`ADMIN_SESSION_SECRET` logs an error and falls back to an insecure value —
+always set it.
 
 ---
 

@@ -5,7 +5,7 @@
  *   - Session-based login (express-session + bcrypt hashes). No query-string
  *     keys, no tokens in URLs — the session cookie is the only credential.
  *   - Three seeded users: nithin, aleena (telecallers) + jithin (admin).
- *     Passwords come from .env on FIRST seed only, stored bcrypt-hashed.
+ *     Default password is "1234", stored only as a bcrypt hash.
  *   - 12h session timeout; login endpoint is rate-limited.
  */
 
@@ -17,42 +17,42 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 const isMock = () => String(process.env.MOCK_MODE ?? 'true').toLowerCase() !== 'false';
 
-// The three seeded accounts. Password ENV var per user; role drives nothing
-// today beyond display, but is stored so an admin-only surface can be added
-// later without a migration.
+// The three default accounts. Role drives nothing today beyond display, but is
+// stored so an admin-only surface can be added later without a migration.
 const SEED_USERS = [
-  { username: 'nithin', role: 'telecaller', envKey: 'ADMIN_SEED_PASSWORD_NITHIN' },
-  { username: 'aleena', role: 'telecaller', envKey: 'ADMIN_SEED_PASSWORD_ALEENA' },
-  { username: 'jithin', role: 'admin', envKey: 'ADMIN_SEED_PASSWORD_JITHIN' },
+  { username: 'nithin', role: 'telecaller' },
+  { username: 'aleena', role: 'telecaller' },
+  { username: 'jithin', role: 'admin' },
 ];
 
-/**
- * Resolve the plaintext seed password for a user. Uses the env var; in MOCK_MODE
- * falls back to a loud dev default so the panel is testable locally without a
- * fully-populated .env. In production a missing password is fatal for that user
- * (we skip seeding it rather than create a guessable login).
- */
-function seedPasswordFor(user) {
-  const fromEnv = process.env[user.envKey];
-  if (fromEnv) return fromEnv;
-  if (isMock()) {
-    console.warn(`⚠️  ${user.envKey} unset — seeding "${user.username}" with dev password "changeme" (MOCK_MODE only).`);
-    return 'changeme';
-  }
-  console.error(`✖  ${user.envKey} unset in production — NOT seeding "${user.username}".`);
-  return null;
-}
+const DEFAULT_PASSWORD = '1234';
+const DEFAULT_PASSWORD_MIGRATION = 'default-password-v2-1234';
 
-/** Seed the three users if they don't exist yet. Safe to call on every boot. */
+/**
+ * Ensure the three default accounts use the documented default password.
+ * Existing rows are repaired as well as new rows so deployments created by the
+ * old env-driven seeder do not remain permanently locked to an unknown hash.
+ */
 export function seedUsers(db) {
+  const repairLegacyHashes = db.getAdminMeta(DEFAULT_PASSWORD_MIGRATION) !== 'complete';
+
   for (const user of SEED_USERS) {
-    if (db.getUser(user.username)) continue;      // already seeded — never overwrite
-    const password = seedPasswordFor(user);
-    if (!password) continue;
-    const password_hash = bcrypt.hashSync(password, 10);
-    const created = db.insertUser({ username: user.username, password_hash, role: user.role });
-    if (created) console.log(`admin: seeded user "${user.username}" (${user.role})`);
+    const existing = db.getUser(user.username);
+    if (existing && (!repairLegacyHashes || bcrypt.compareSync(DEFAULT_PASSWORD, existing.password_hash))) {
+      continue;
+    }
+
+    const password_hash = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
+    if (existing) {
+      db.updateUserPassword(user.username, password_hash);
+      console.log(`admin: reset default password for "${user.username}" (${user.role})`);
+    } else {
+      const created = db.insertUser({ username: user.username, password_hash, role: user.role });
+      if (created) console.log(`admin: seeded user "${user.username}" (${user.role})`);
+    }
   }
+
+  db.setAdminMeta(DEFAULT_PASSWORD_MIGRATION, 'complete');
 }
 
 /** Verify a username/password pair against the stored hash. Returns the user row or null. */

@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS agent_views (
   phone TEXT PRIMARY KEY,
   last_view_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS admin_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 /**
@@ -82,6 +87,14 @@ export function withAdminQueries(db) {
       INSERT OR IGNORE INTO admin_users (username, password_hash, role, created_at)
       VALUES (@username, @password_hash, @role, @created_at)
     `),
+    updateUserPassword: raw.prepare(
+      'UPDATE admin_users SET password_hash = ? WHERE username = ?'
+    ),
+    getAdminMeta: raw.prepare('SELECT value FROM admin_meta WHERE key = ?'),
+    setAdminMeta: raw.prepare(`
+      INSERT INTO admin_meta (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `),
   };
 
   return Object.assign(db, {
@@ -115,6 +128,20 @@ export function withAdminQueries(db) {
     insertUser({ username, password_hash, role = 'telecaller', created_at = Date.now() }) {
       const info = stmts.insertUser.run({ username, password_hash, role, created_at });
       return info.changes > 0;
+    },
+
+    /** Replace the bcrypt hash for an existing default admin user. */
+    updateUserPassword(username, password_hash) {
+      const info = stmts.updateUserPassword.run(password_hash, username);
+      return info.changes > 0;
+    },
+
+    getAdminMeta(key) {
+      return stmts.getAdminMeta.get(key)?.value ?? null;
+    },
+
+    setAdminMeta(key, value) {
+      stmts.setAdminMeta.run(key, value);
     },
   });
 }

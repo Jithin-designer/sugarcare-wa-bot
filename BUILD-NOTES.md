@@ -91,18 +91,14 @@ the "poll every 5s, no websockets" auto-refresh.)
 npm install                     # installs the 4 new deps
 node admin/seed-demo.cjs        # seed 3 demo conversations into data/bot.db
 
-# start the admin panel with dev credentials
+# start the admin panel
 MOCK_MODE=true \
 ADMIN_SESSION_SECRET=devsecret \
-ADMIN_SEED_PASSWORD_NITHIN=demo123 \
-ADMIN_SEED_PASSWORD_ALEENA=demo123 \
-ADMIN_SEED_PASSWORD_JITHIN=demo123 \
 node admin/server.js
 # → http://127.0.0.1:3010/admin/login
 ```
-Log in as **nithin / demo123** (or aleena / jithin). If the seed-password env
-vars are unset in MOCK_MODE, each user is seeded with the dev password
-`changeme` (a warning is printed).
+Log in as **nithin / 1234** (or aleena / jithin with the same default
+password). Only bcrypt hashes are stored.
 
 The bot and panel can run together (`npm start` on :3000, panel on :3010),
 both against `data/bot.db`. In MOCK_MODE the reply box logs to `messages` +

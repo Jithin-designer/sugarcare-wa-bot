@@ -11,11 +11,12 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 process.env.MOCK_MODE = 'true';
 process.env.MOCK_OUTBOX = 'data/test_outbox.jsonl';
 process.env.ADMIN_SESSION_SECRET = 'test_admin_secret';
-process.env.ADMIN_SEED_PASSWORD_NITHIN = 'testpass-nithin';
 
 const { openDb } = await import('../src/db.js');
 const { withAdminQueries } = await import('../admin/db.js');
 const { createAdminApp } = await import('../admin/server.js');
+const { seedUsers, verifyLogin } = await import('../admin/auth.js');
+const bcrypt = (await import('bcryptjs')).default;
 
 let db;
 let ctx;
@@ -28,6 +29,13 @@ const base = () => `http://localhost:${ctx.port}`;
 
 beforeAll(async () => {
   db = withAdminQueries(openDb(':memory:'));
+  // Reproduce an account created by the old env-driven seeder. App startup must
+  // repair it, not preserve an unknown password forever.
+  db.insertUser({
+    username: 'nithin',
+    password_hash: bcrypt.hashSync('old-seed-password', 10),
+    role: 'telecaller',
+  });
   const app = createAdminApp({ db });   // default send = real (MOCK) sendMessage
   ctx = await startServer(app);
 });
@@ -42,6 +50,24 @@ describe('auth guard', () => {
     expect([301, 302, 303, 307].includes(res.status)).toBe(true);
     expect(res.headers.get('location')).toBe('/admin/login');
   });
+
+  it('sets all default users to password 1234, including existing rows', () => {
+    expect(verifyLogin(db, 'nithin', '1234')).toMatchObject({ username: 'nithin', role: 'telecaller' });
+    expect(verifyLogin(db, 'aleena', '1234')).toMatchObject({ username: 'aleena', role: 'telecaller' });
+    expect(verifyLogin(db, 'jithin', '1234')).toMatchObject({ username: 'jithin', role: 'admin' });
+    expect(verifyLogin(db, 'nithin', 'old-seed-password')).toBeNull();
+  });
+
+  it('does not undo a password change after the one-time seed migration', () => {
+    db.updateUserPassword('nithin', bcrypt.hashSync('rotated-password', 10));
+    seedUsers(db);
+    expect(verifyLogin(db, 'nithin', 'rotated-password')).toMatchObject({ username: 'nithin' });
+    expect(verifyLogin(db, 'nithin', '1234')).toBeNull();
+
+    // Restore the login used by the remaining HTTP tests without rerunning the
+    // completed migration.
+    db.updateUserPassword('nithin', bcrypt.hashSync('1234', 10));
+  });
 });
 
 // Log in as the seeded telecaller and return the session cookie string.
@@ -49,7 +75,7 @@ async function login() {
   const res = await fetch(`${base()}/admin/login`, {
     method: 'POST',
     redirect: 'manual',
-    body: new URLSearchParams({ username: 'nithin', password: 'testpass-nithin' }),
+    body: new URLSearchParams({ username: 'nithin', password: '1234' }),
   });
   const cookies = res.headers.getSetCookie();
   expect(cookies.length).toBeGreaterThan(0);
