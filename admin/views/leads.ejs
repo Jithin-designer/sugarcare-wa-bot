@@ -28,7 +28,7 @@
             <td>
               <span class="pill <%= Number(l.priority) ? 'prio' : '' %>"><%= l.lead_type %></span>
             </td>
-            <td><%= new Date(l.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) %></td>
+            <td><%= new Date(l.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }) %></td>
           </tr>
         <% }) %>
       </tbody>

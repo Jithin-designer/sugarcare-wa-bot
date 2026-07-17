@@ -82,9 +82,13 @@
       return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+    // HH:MM in IST — pinned to Asia/Kolkata so live-polled bubbles match the
+    // server-rendered ones (which also use IST) regardless of the viewer's zone.
+    var IST_HHMM = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata'
+    });
     function clock(ts) {
-      var d = new Date(ts);
-      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      return IST_HHMM.format(new Date(ts));
     }
     function atBottom() {
       return thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;

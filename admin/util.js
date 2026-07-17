@@ -33,13 +33,20 @@ export function relativeTime(ts, now = Date.now()) {
   return `${d}d ago`;
 }
 
-/** Wall-clock HH:MM (24h) for a ms timestamp — used on message bubbles. */
+/**
+ * Wall-clock HH:MM (24h) in IST for a ms timestamp — used on message bubbles.
+ * The timezone is pinned to Asia/Kolkata so the display is identical regardless
+ * of the server's local timezone (Railway runs in UTC; getHours() would drift).
+ */
+const IST_HHMM = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Kolkata',
+});
 export function clock(ts) {
   if (!ts) return '';
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  return IST_HHMM.format(new Date(ts));
 }
 
 /** Truncate a preview string to n chars with an ellipsis. */
