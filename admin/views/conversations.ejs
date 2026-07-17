@@ -69,7 +69,12 @@
 <% if (selected) { %>
 <script>
   (function () {
-    var PHONE = <%- JSON.stringify(selected) %>;
+    // `selected` is the :phone URL param (attacker-controllable). JSON.stringify
+    // escapes quotes but NOT `<`, so a value containing `</script>` would break
+    // out of this tag → XSS. Escape `<` (and comment/CDATA terminators) so the
+    // literal can never end the script context. EJS `<%=` elsewhere is HTML-
+    // escaped and safe; this is the one <script>-context sink.
+    var PHONE = <%- JSON.stringify(selected).replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e').replace(/\]\]>/g, ']]\\u003e') %>;
     var thread = document.getElementById('thread');
 
     function esc(s) {
