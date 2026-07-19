@@ -4,6 +4,10 @@
 .env.*
 !.env.example
 
+# Local live-deploy notes — contains the real phone number, Phone Number ID,
+# and WABA ID. Business-confidential; keep on disk but never commit.
+LIVE-DEPLOY.md
+
 # Runtime data (SQLite db + mock outbox). `data/` already covers everything
 # below; the explicit db entries are listed too for belt-and-suspenders safety
 # (the WAL/SHM sidecar files created by journal_mode=WAL must never be committed).

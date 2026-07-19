@@ -71,23 +71,24 @@ the panel reads the same file.
 # Session cookie signing secret — long random string (e.g. `openssl rand -hex 32`)
 ADMIN_SESSION_SECRET=<long-random-string>
 
-# Seed passwords (used ONCE on first boot, then stored bcrypt-hashed).
-ADMIN_SEED_PASSWORD_NITHIN=<password for nithin>
-ADMIN_SEED_PASSWORD_ALEENA=<password for aleena>
-ADMIN_SEED_PASSWORD_JITHIN=<password for jithin>
+# Seed passwords for the three panel users — set BEFORE the first start.
+# Used once, on first seed, then stored bcrypt-hashed. An unset variable means
+# that user is NOT seeded in production (no guessable default is ever created).
+ADMIN_SEED_PASSWORD_NITHIN=<password-for-nithin>
+ADMIN_SEED_PASSWORD_ALEENA=<password-for-aleena>
+ADMIN_SEED_PASSWORD_JITHIN=<password-for-jithin>
 
 # Optional — defaults to 3010.
 # ADMIN_PORT=3010
 ```
 
-Seeding is idempotent: once a user exists, its stored hash is never overwritten,
-so changing an `ADMIN_SEED_PASSWORD_*` value later has **no effect** on an
-already-seeded user. To rotate a password, update the hash in the DB directly or
-delete that `admin_users` row and restart.
-
-In production, a missing `ADMIN_SEED_PASSWORD_*` means that user is **not
-seeded** (no guessable default). A missing `ADMIN_SESSION_SECRET` logs an error
-and falls back to an insecure value — always set it.
+The three users (`nithin`, `aleena`, `jithin`) are seeded on first start from
+the `ADMIN_SEED_PASSWORD_*` variables above; only bcrypt hashes are stored, and
+an existing user is never overwritten (so a rotated password survives restarts).
+If a seed variable is unset in production that user is skipped rather than given
+a guessable default — set all three before the first boot. A missing
+`ADMIN_SESSION_SECRET` logs an error and falls back to an insecure value —
+always set it.
 
 ---
 

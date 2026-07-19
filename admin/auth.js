@@ -43,7 +43,11 @@ function seedPasswordFor(user) {
   return null;
 }
 
-/** Seed the three users if they don't exist yet. Safe to call on every boot. */
+/**
+ * Seed the three users if they don't exist yet. Safe to call on every boot.
+ * NEVER overwrites an existing row — an operator who has rotated a password (or
+ * whose hash predates a change here) keeps their credential untouched.
+ */
 export function seedUsers(db) {
   for (const user of SEED_USERS) {
     if (db.getUser(user.username)) continue;      // already seeded — never overwrite

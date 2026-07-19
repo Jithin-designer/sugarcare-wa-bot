@@ -11,11 +11,16 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 process.env.MOCK_MODE = 'true';
 process.env.MOCK_OUTBOX = 'data/test_outbox.jsonl';
 process.env.ADMIN_SESSION_SECRET = 'test_admin_secret';
-process.env.ADMIN_SEED_PASSWORD_NITHIN = 'testpass-nithin';
+// Seed password for the users the HTTP login tests authenticate as. Only used
+// for rows that do NOT already exist (the seeder never overwrites).
+process.env.ADMIN_SEED_PASSWORD_ALEENA = '1234';
+process.env.ADMIN_SEED_PASSWORD_JITHIN = '1234';
 
 const { openDb } = await import('../src/db.js');
 const { withAdminQueries } = await import('../admin/db.js');
 const { createAdminApp } = await import('../admin/server.js');
+const { seedUsers, verifyLogin } = await import('../admin/auth.js');
+const bcrypt = (await import('bcryptjs')).default;
 
 let db;
 let ctx;
@@ -28,6 +33,13 @@ const base = () => `http://localhost:${ctx.port}`;
 
 beforeAll(async () => {
   db = withAdminQueries(openDb(':memory:'));
+  // Reproduce an account that already exists before startup (e.g. seeded by an
+  // earlier boot). App startup must NEVER overwrite it — its password stands.
+  db.insertUser({
+    username: 'nithin',
+    password_hash: bcrypt.hashSync('1234', 10),
+    role: 'telecaller',
+  });
   const app = createAdminApp({ db });   // default send = real (MOCK) sendMessage
   ctx = await startServer(app);
 });
@@ -42,6 +54,24 @@ describe('auth guard', () => {
     expect([301, 302, 303, 307].includes(res.status)).toBe(true);
     expect(res.headers.get('location')).toBe('/admin/login');
   });
+
+  it('seeds missing users from their env password, and never overwrites an existing row', () => {
+    // nithin pre-existed (seeded in beforeAll) — its password must be untouched.
+    expect(verifyLogin(db, 'nithin', '1234')).toMatchObject({ username: 'nithin', role: 'telecaller' });
+    // aleena + jithin did not exist — seeded from ADMIN_SEED_PASSWORD_* env vars.
+    expect(verifyLogin(db, 'aleena', '1234')).toMatchObject({ username: 'aleena', role: 'telecaller' });
+    expect(verifyLogin(db, 'jithin', '1234')).toMatchObject({ username: 'jithin', role: 'admin' });
+  });
+
+  it('never resets a rotated password on a later boot (no auto-overwrite)', () => {
+    db.updateUserPassword('nithin', bcrypt.hashSync('rotated-password', 10));
+    seedUsers(db);   // simulate a subsequent app boot
+    expect(verifyLogin(db, 'nithin', 'rotated-password')).toMatchObject({ username: 'nithin' });
+    expect(verifyLogin(db, 'nithin', '1234')).toBeNull();
+
+    // Restore the login used by the remaining HTTP tests.
+    db.updateUserPassword('nithin', bcrypt.hashSync('1234', 10));
+  });
 });
 
 // Log in as the seeded telecaller and return the session cookie string.
@@ -49,7 +79,7 @@ async function login() {
   const res = await fetch(`${base()}/admin/login`, {
     method: 'POST',
     redirect: 'manual',
-    body: new URLSearchParams({ username: 'nithin', password: 'testpass-nithin' }),
+    body: new URLSearchParams({ username: 'nithin', password: '1234' }),
   });
   const cookies = res.headers.getSetCookie();
   expect(cookies.length).toBeGreaterThan(0);

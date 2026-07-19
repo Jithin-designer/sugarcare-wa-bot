@@ -82,6 +82,9 @@ export function withAdminQueries(db) {
       INSERT OR IGNORE INTO admin_users (username, password_hash, role, created_at)
       VALUES (@username, @password_hash, @role, @created_at)
     `),
+    updateUserPassword: raw.prepare(
+      'UPDATE admin_users SET password_hash = ? WHERE username = ?'
+    ),
   };
 
   return Object.assign(db, {
@@ -114,6 +117,12 @@ export function withAdminQueries(db) {
     /** Insert a seed user if absent (INSERT OR IGNORE). Returns true if created. */
     insertUser({ username, password_hash, role = 'telecaller', created_at = Date.now() }) {
       const info = stmts.insertUser.run({ username, password_hash, role, created_at });
+      return info.changes > 0;
+    },
+
+    /** Replace the bcrypt hash for an existing admin user (used by tests). */
+    updateUserPassword(username, password_hash) {
+      const info = stmts.updateUserPassword.run(password_hash, username);
       return info.changes > 0;
     },
   });
