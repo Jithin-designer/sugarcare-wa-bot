@@ -19,9 +19,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 
 import { openDb } from './src/db.js';
-import { processMessage, STATES, isClinicalQuestion } from './src/stateMachine.js';
+import { processMessage, STATES, isClinicalQuestion, isSafetyRedirectQuestion } from './src/stateMachine.js';
 import { sendMessage, isWithinSessionWindow, describe } from './src/whatsapp.js';
 import { assertClean } from './src/bannedWords.js';
+import { classifyIntent, INTENTS } from './src/intentClassifier.js';
+import { rescheduleHandoff, IDS } from './src/messages.js';
 
 const WEBHOOK_PATHS = ['/webhook', '/whatsapp/webhook'];
 const TERMINAL_STATES = new Set([STATES.HUMAN_HANDOFF, STATES.DORMANT]);
@@ -226,6 +228,77 @@ export async function handleIncoming({ db, send = sendMessage }, msg, now = Date
       return 'agent_owned';
     }
     // else: clinical question while agent-owned → fall through so the guard fires.
+  }
+
+  // ── Intent routing (free-text only) ─────────────────────────────────────────
+  // Runs only for typed text (button/list taps already carry a choice ID and are
+  // handled by processMessage unchanged).
+  //
+  // SAFETY FIRST (HARD RULE #1): a clinical or personal-outcome question is NEVER
+  // routed. We leave it as free text so processMessage's own guards fire first
+  // (isClinicalQuestion / isSafetyRedirectQuestion, stateMachine.js). Without this
+  // pre-check a message like "ente sugar 300, appointment venam" would classify as
+  // BOOKING, be turned into a button tap, and skip the guard — the guard only runs
+  // on real text. So the classifier is only consulted once the text has cleared
+  // both safety detectors. Intent routing can never override the safety guard.
+  if (
+    msg.type === 'text' && msg.text && !msg.buttonId && !msg.listId &&
+    !isClinicalQuestion(msg.text) && !isSafetyRedirectQuestion(msg.text)
+  ) {
+    const { intent } = classifyIntent(msg.text);
+
+    if (intent === INTENTS.RESCHEDULE) {
+      // No calendar self-serve — capture the request, hand off to a telecaller,
+      // and set agent_owned=1 so the bot stays silent until a human releases it.
+      // Order matters: upsert the conversation row FIRST, then flip agent_owned —
+      // setAgentOwned is an UPDATE and would be a no-op for a brand-new phone that
+      // has no row yet.
+      const payload = rescheduleHandoff();
+      assertClean(payload.text.body, 'outbound');
+      db.saveConversation(msg.from, {
+        state: conv.state,
+        lang: conv.lang,
+        data: conv.data,
+        fallback_count: 0,
+        dormant_until: null,
+        last_user_message_at: now,
+        updated_at: now,
+      });
+      db.setAgentOwned(msg.from, 1);
+      if (isWithinSessionWindow(now, now)) {
+        await send(msg.from, payload);
+        logOutbound(db, msg.from, payload, now);
+      }
+      console.log(`intent: RESCHEDULE for ${msg.from} — agent_owned=1, telecaller notified`);
+      return 'processed';
+    }
+
+    if (intent === INTENTS.BOOKING) {
+      // Inject the booking button ID so processMessage routes into the booking flow.
+      msg = { ...msg, type: 'interactive', buttonId: IDS.BTN_BOOK_SHORT, listId: null };
+      console.log(`intent: BOOKING for ${msg.from} — injecting BTN_BOOK_SHORT`);
+    } else if (intent === INTENTS.MEDICINE) {
+      msg = { ...msg, type: 'interactive', buttonId: IDS.BTN_ORDER_MEDS_SHORT, listId: null };
+      console.log(`intent: MEDICINE for ${msg.from} — injecting BTN_ORDER_MEDS_SHORT`);
+    } else if (intent === INTENTS.FAQ) {
+      msg = { ...msg, type: 'interactive', buttonId: IDS.BTN_DOUBT, listId: null };
+      console.log(`intent: FAQ for ${msg.from} — injecting BTN_DOUBT`);
+    } else if (intent === INTENTS.AFFIRMATION) {
+      // A bare "yes / ok / ശരി". This booking-first FSM has no active yes/no gate,
+      // so there is nothing to literally "advance" with a lone affirmative:
+      //   • at WELCOME (nothing pending) → clear `greeted` so processMessage
+      //     re-sends the welcome screen cleanly (no fallback strike).
+      //   • mid-flow (state past WELCOME) → fall through as free text so the
+      //     current state handler keeps the user in that pending flow (re-prompts
+      //     its list) rather than being derailed into a fresh booking.
+      if (conv.state === STATES.WELCOME) {
+        conv = { ...conv, data: { ...conv.data, greeted: false } };
+        console.log(`intent: AFFIRMATION at WELCOME for ${msg.from} — re-sending welcome`);
+      } else {
+        console.log(`intent: AFFIRMATION in flow ${conv.state} for ${msg.from} — passing through`);
+      }
+    }
+    // UNKNOWN: fall through to processMessage without modification.
   }
 
   // ── Pure decision ──

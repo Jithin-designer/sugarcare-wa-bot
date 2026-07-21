@@ -1,95 +1,146 @@
-# BUILD-NOTES — Telecaller Admin Panel
+# BUILD-NOTES — Free-text intent router
 
-Branch: `feature/admin-panel` (do **not** push to main).
-All work is additive and fully testable in `MOCK_MODE`. All **91** tests pass
-(78 pre-existing + 13 new). No existing state-machine flow logic was changed
-beyond the single `agent_owned` check, and the webhook route's response
-behaviour is untouched.
+Branch: `feature/intent-router-node` (built off `main`, **not pushed**).
 
----
-
-## 1. Bot changes (additive only)
-
-### `src/db.js`
-- **`messages` table** added to the startup schema (`CREATE TABLE IF NOT EXISTS`)
-  with the `idx_messages_phone` / `idx_messages_timestamp` indexes. Permanent
-  log of every inbound + outbound message. Never purged.
-- **`agent_owned` column** on `conversations`, added via a guarded migration
-  (`ensureColumn` → probes `PRAGMA table_info` then `ALTER TABLE ADD COLUMN`,
-  because `ALTER … ADD COLUMN` is not idempotent). Runs safely on every boot,
-  including against the existing production `bot.db`.
-- **WAL** (`db.pragma('journal_mode = WAL')`) was **already present** — required
-  so the bot and the admin panel can read/write the same file concurrently.
-  Verified live: `journal_mode = wal`.
-- New query methods: `logMessage()`, `messagesForPhone()`, `setAgentOwned()`.
-  The existing `upsertConversation` statement does **not** list `agent_owned`,
-  so a normal `saveConversation` can never clobber the telecaller's flag (INSERT
-  → `DEFAULT 0`; UPDATE → preserved).
-
-### `server.js`
-- Imports `describe` (whatsapp.js) and `isClinicalQuestion` (stateMachine.js).
-- **Inbound logging**: `logInbound()` after the idempotency check (so duplicates
-  aren't double-logged) and before every gate (so dormant / agent-owned pings
-  still appear in history). Interactive taps are logged with the richer
-  `button_reply` / `list_reply` type.
-- **Outbound logging**: `logOutbound()` inside the dispatch loop — every actual
-  send is logged, MOCK_MODE included.
-- **`agent_owned` gate** (the only flow change), placed after the terminal-reset
-  block and before `processMessage`:
-  - `agent_owned = 1` + free text that is **not** a clinical question →
-    bot stays silent (inbound already logged), returns status `'agent_owned'`.
-  - Patient taps **any** interactive button/list row → `setAgentOwned(0)` then
-    falls through to normal bot processing (ownership released).
-  - Clinical escalation still fires even while agent-owned (safety guard) — a
-    clinical free-text message is never left silent.
-  - Note on "banned words": the compliance guard (`assertClean`) is **outbound
-    only** in this codebase, so there is no inbound banned-word path to fire;
-    the safety guard that "still fires" while agent-owned is the clinical
-    escalation. This is intentional and matches the existing HARD RULE wiring.
-
-No changes to: signature verification, the 200-in-5s ACK, idempotency, dormancy
-gating, or the state machine's decisions.
+The bot used to understand only button/list taps; any TYPED sentence
+("appointment venam", "Need consultation", "reschedule", "yes") fell through to
+the welcome menu. This adds a **deterministic keyword classifier** that maps
+typed text onto the flows the bot already has — no LLM, no external API, no new
+npm deps.
 
 ---
 
-## 2. Admin panel files added (`admin/`)
+## What changed
 
-| File | Purpose |
-|------|---------|
-| `admin/server.js` | Separate Express app (port 3010). `createAdminApp({db, send})` factory + boot block. All routes under `/admin/*`. |
-| `admin/db.js` | Opens the **same** `data/bot.db` via the bot's `openDb()` (so shared migrations run), adds admin-owned `admin_users` + `agent_views` tables and all admin queries. |
-| `admin/auth.js` | express-session (12h rolling), bcrypt seeding of the 3 users, `verifyLogin`, `requireAuth` guard, `loginLimiter` (express-rate-limit). |
-| `admin/util.js` | Pure view helpers: `windowInfo` (24h), `relativeTime`, `clock`, `truncate`. |
-| `admin/views/*.ejs` | `login`, `conversations` (two-pane), `leads`, `partials/head`, `partials/foot`. Server-rendered, no build step. |
-| `admin/public/style.css` | SugarCARE tokens (purple `#4A2FA0`, orange `#E86A1A`, ink `#1A0E50`), Plus Jakarta Sans + Noto Sans Malayalam, two-pane desktop / stacked mobile. |
-| `admin/seed-demo.cjs` | Inserts 3 demo conversations (open/bot-owned, open/agent-owned, closed-window) with mixed in/out message history + leads. |
+| File | Change |
+|------|--------|
+| `src/intentClassifier.js` | **New.** Pure `classifyIntent(text)` → `{ intent, confidence, matched }`. Keyword/pattern only. Exports `INTENTS`, `KEYWORDS` (for audit tooling). |
+| `server.js` | **Wiring only.** Intent routing added in `handleIncoming`, *after* the dormancy + agent-owned gates and *after* a safety pre-check, *before* `processMessage`. |
+| `src/messages.js` | Added `rescheduleHandoff()` — the bilingual "our team will call you" message (includes the clinic call line). |
+| `tests/intentClassifier.test.js` | **New.** 79 pure unit tests (each intent in Malayalam / Manglish / English, case + punctuation, UNKNOWN passthrough, priority ordering, confidence contract). |
+| `tests/intentRouter.test.js` | **New.** 11 server-level tests driving `handleIncoming` end-to-end (routing, safety-wins, reschedule handoff, affirmation, 2-strike fallback, agent-owned silence). |
 
-**New dependencies** (exactly the four allowed): `express-session`, `bcryptjs`
-(chosen over native `bcrypt` — pure JS, no compile step), `ejs`,
-`express-rate-limit`.
+**No dependency changes** (`package.json` untouched; `package-lock.json` unchanged).
 
-### Routes
+### Contract
+
+```js
+import { classifyIntent } from './src/intentClassifier.js';
+const { intent, confidence, matched } = classifyIntent('appointment venam');
+// intent:     'BOOKING' | 'RESCHEDULE' | 'MEDICINE' | 'FAQ' | 'AFFIRMATION' | 'UNKNOWN'
+// confidence: 'high' (a trigger fired) | 'low' (UNKNOWN)
+// matched:    the trigger phrase that fired ('' for UNKNOWN) — for the audit log
 ```
-GET  /admin/login              login form
-POST /admin/login              authenticate (rate-limited)
-GET  /admin/logout             clear session
-GET  /admin/                   conversation list (auth)
-GET  /admin/conv/:phone        conversation view (auth)
-GET  /admin/conv/:phone/messages   JSON thread for the 5s poll (auth) — added for polling
-POST /admin/reply              send a reply (auth) body: {phone, text}
-POST /admin/release/:phone     release to bot (auth)
-GET  /admin/leads              leads table (auth)
-```
-(`/admin/conv/:phone/messages` is an additive read-only JSON endpoint powering
-the "poll every 5s, no websockets" auto-refresh.)
 
 ---
 
-## 3. How to test locally (MOCK_MODE)
+## How routing is wired (order matters)
+
+Inside `handleIncoming`, for a **typed text** message only (button/list taps are
+untouched):
+
+1. **Dormancy gate** — a 12h-dormant thread stays silent. *(pre-existing)*
+2. **Agent-owned gate** — if a telecaller owns the thread, free text is logged
+   and the bot stays silent (unless it is a clinical escalation). *(pre-existing)*
+3. **Safety pre-check (HARD RULE #1)** — if the text is a clinical
+   (`isClinicalQuestion`) or personal-outcome (`isSafetyRedirectQuestion`)
+   question, the classifier is **skipped** and the text falls through to
+   `processMessage`, where the existing safety guard fires. **Intent routing can
+   never override the safety guard.**
+4. **`classifyIntent`** — routes the cleared text:
+   - `BOOKING`   → inject `BTN_BOOK_SHORT`   → booking clinic picker
+   - `MEDICINE`  → inject `BTN_ORDER_MEDS_SHORT` → medicine clinic picker
+   - `FAQ`       → inject `BTN_DOUBT`        → 8-row FAQ list
+   - `RESCHEDULE`→ set `agent_owned=1` + send `rescheduleHandoff()` (telecaller
+     handles it; **no calendar self-serve**), then return.
+   - `AFFIRMATION` → at WELCOME re-send the welcome (clean re-greet); mid-flow
+     pass through as text so the current flow handles it.
+   - `UNKNOWN`   → unchanged; existing 2-strike fallback applies.
+
+> **Why injection?** `processMessage` already routes button IDs into every flow.
+> A matched intent is turned into the equivalent button tap, so *zero* flow logic
+> is duplicated — the classifier only decides *which* existing door to open.
+
+---
+
+## Trigger phrases → intent (for Dr. Rakesh to audit)
+
+Every phrase below lives in `src/intentClassifier.js` (`KEYWORDS`) and nowhere
+else. To add/remove a phrase, edit that one array. **Matching rules:** a bare
+ASCII word matches on a word boundary (so `ok` ≠ `book`); a multi-word phrase or
+any Malayalam token matches as a substring. **Priority** is top-to-bottom below —
+`RESCHEDULE` is checked before `BOOKING` (both mention "appointment"), and
+`AFFIRMATION` is checked last (so "ok, book" books rather than merely affirms).
+
+### RESCHEDULE  — change an appointment you already have → telecaller
+- **English:** reschedule · change appointment · change my appointment · change the appointment · reschedule appointment · reschedule my appointment · change time · change my time · different time · another time · another day · postpone · prepone · move my appointment · date change
+- **Manglish:** reschedule cheyyanam · reschedule cheyyam · time maat · time maaty · time maathanam · samayam maat · appointment maat · appointment maaty · date maatan
+- **Malayalam:** റീഷ · സമയം മാറ്റ · സമയ മാറ്റ · സമയമാറ്റ · ടൈം മാറ്റ · അപ്പോയിന്റ്മെന്റ് മാറ്റ · അപ്പോയിന്റ്മന്റ് മാറ്റ · മാറ്റണം · മാറ്റണോ · മാറ്റിവെക്ക
+
+### BOOKING  — book a new appointment / consultation
+- **English:** book · booking · appointment · appointments · appt · consultation · consult · book appointment · book a consultation · need appointment · need consultation · schedule appointment · book slot
+- **Manglish:** appointment venam · apointment venam · appointment veno · book cheyyam · book cheyyanam · book tharam · consultation venam · doctor kaananam · doctor venam · doctore kaanam
+- **Malayalam:** ബുക്ക് · അപ്പോയിന്റ്മെന്റ് · അപ്പോയിന്റ്മന്റ് · ബുക്ക് ചെയ്യണം · കൺസൾട്ടേഷൻ · ഡോക്ടറെ കാണണം
+
+### MEDICINE  — refill / order medicine
+- **English:** medicine · medicines · meds · refill · refil · medicine refill · medicine order · order medicine · refill prescription · need medicine
+- **Manglish:** marunnu · marunn · marunnu venam · marunnu order · marunnu orden · medicine venam · meds venam · tablet venam · tablet veno
+- **Malayalam:** മരുന്ന് · മരുന്നു · മരന്ന് · മരുന്ന് വേണം · മരുന്ന് ഓർഡർ · മരുന്ന് തീർന്നു
+
+### FAQ  — a general question → 8-row FAQ list
+- **English:** doubt · question · query · timing · timings · location · address · fee · fees · cost · charge · charges · price · how much · where is · have a doubt · have a question · quick question · opening hours · working hours
+- **Manglish:** sandham · sandheham · chodyam · doubt undu · fee ethra · fee evvalavu · charge ethra · timing ethu · timing engane · clinic evide · evide aanu
+- **Malayalam:** സംശയം · സംശയ · ചോദ്യം · ഡൗട്ട് · ഫീസ് · വില · സ്ഥലം · എവിടെ · സമയം · ചെലവ് · ടൈമിംഗ്
+
+### AFFIRMATION  — a bare "yes / ok"
+- **English:** yes · yeah · yep · yup · yess · yes please · ok · okay · okey · okk · sure
+- **Manglish:** yesu · yas · sari · seri · shari · adhe · athe · aah
+- **Malayalam:** ശരി · അതെ · ഉവ്വ് · ആകാം · ഓക്കേ · ഓക്കെ
+
+> **Deliberately excluded from MEDICINE:** words like *insulin / dose / tablet
+> reading* are `CLINICAL_STRONG` in `stateMachine.js` and escalate to a human
+> *before* the classifier runs. "timing"/"timings" is FAQ, but bare "time" is a
+> RESCHEDULE hint, so only the "-ing" forms are FAQ triggers.
+
+---
+
+## Design decisions & edge cases
+
+- **Safety always wins.** `"ente sugar 300, appointment venam"` contains a
+  booking phrase, but the numeric-sugar clinical guard fires first and it is
+  escalated to a doctor — never booked. Covered by
+  `tests/intentRouter.test.js › safety guard fires first`.
+- **RESCHEDULE for a brand-new phone.** The conversation row is upserted *before*
+  `setAgentOwned(1)` — `setAgentOwned` is an `UPDATE` and would silently no-op on
+  a phone that has no row yet, leaving the thread un-owned. Regression covered.
+- **AFFIRMATION is adapted to this FSM.** The active flow (WELCOME → clinic pick →
+  confirm → WELCOME) has no yes/no gate, so a lone "yes" has nothing to literally
+  advance. At WELCOME it cleanly re-sends the welcome (no fallback strike);
+  mid-flow it is passed through as text so the current flow handles it, and is
+  never allowed to hijack the conversation into a fresh booking.
+- **agent-owned stays silent** on typed booking/medicine/FAQ intent — the
+  agent-owned gate runs before the classifier.
+
+## Python-bot reference
+
+Per the "do not clone from GitHub" constraint, the reference repo was **not
+cloned**. A read-only `git ls-remote` of
+`github.com/Jithin-designer/preventify-diabetes-ai` shows it has **only `main`** —
+the `feature/intent-router` branch named in the brief does not exist. Triggers
+were therefore authored from the SugarCARE brief plus the existing
+Manglish/Malayalam detector patterns already in `stateMachine.js`
+(`isClinicalQuestion` / `isSafetyRedirectQuestion`).
+
+---
+
+## Running the tests locally
 
 ```bash
-npm install                     # installs the 4 new deps
-node admin/seed-demo.cjs        # seed 3 demo conversations into data/bot.db
+# full suite (better-sqlite3 compiles natively on macOS) — all green
+MOCK_MODE=true npm test
+
+# just the intent work
+MOCK_MODE=true npx vitest run tests/intentClassifier.test.js tests/intentRouter.test.js
 
 # start the admin panel with dev credentials
 MOCK_MODE=true \
@@ -104,44 +155,6 @@ Log in as **nithin / demo123** (or aleena / jithin). If the seed-password env
 vars are unset in MOCK_MODE, each user is seeded with the dev password
 `changeme` (a warning is printed).
 
-The bot and panel can run together (`npm start` on :3000, panel on :3010),
-both against `data/bot.db`. In MOCK_MODE the reply box logs to `messages` +
-console and never calls the Graph API. Verified end-to-end in a browser:
-login → list badges (unread/🔒/window) → thread bubbles (Malayalam renders) →
-send reply (logged, sets `agent_owned=1`) → closed-window disables composer →
-Release to bot (`agent_owned=0`) → Leads tab → mobile stacked layout.
-
-Run the tests: `npm test`  →  **91 passed**.
-
-New tests: `tests/messagesLog.test.js` (inbound/outbound logging, agent_owned
-suppression, interactive resume), `tests/window.test.js` (24h open/closed/edge),
-`tests/admin.test.js` (unauth redirect, reply logs without fetch, closed-window
-refusal).
-
----
-
-## 4. Data safety status
-
-- ✅ `.gitignore` already ignored `data/` (covers `bot.db`, `bot.db-wal`,
-  `bot.db-shm`, `mock_outbox.jsonl`). The three explicit `data/bot.db*` lines
-  were **added** anyway for belt-and-suspenders per the brief.
-- ✅ `git ls-files` shows **no** `.db` / `data/` files tracked — nothing to
-  untrack. (If a `.db` were ever tracked, the untrack command would be:
-  `git rm --cached data/bot.db data/bot.db-wal data/bot.db-shm` — not needed here.)
-- ✅ No `.db` file is committed in this branch.
-- ✅ Live `bot.db` verified after migration: `messages` table present,
-  `conversations.agent_owned` present, `journal_mode = wal`.
-
----
-
-## 5. Blockers / manual verification steps
-
-- **None blocking.** All features verified in MOCK_MODE + browser.
-- **Session store**: express-session uses the default in-memory `MemoryStore`
-  (fine for a single pm2 instance — see `admin/DEPLOY.md`). If the panel is ever
-  scaled to multiple processes, swap in a shared store; today it is single-proc.
-- **Live send** (`MOCK_MODE=false`) uses the existing `sendMessage()` client
-  (Graph API v25.0, `WHATSAPP_TOKEN` + `PHONE_NUMBER_ID`). This path was **not**
-  exercised against the real Meta API here — verify one real reply after deploy.
-- **`npm audit`** reports pre-existing advisories in transitive deps; not
-  introduced by this branch and left untouched (no `audit fix --force`).
+Current status: **197 tests pass** (13 files) in `MOCK_MODE`, including 79 pure
+classifier tests + 11 server-level router tests. No real Meta/WhatsApp API call is
+ever made (`MOCK_MODE` logs instead of sending); no real patient data is used.

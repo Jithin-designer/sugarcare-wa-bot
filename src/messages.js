@@ -356,6 +356,15 @@ export function fallbackHandoff() {
   ];
 }
 
+/** Intent router: reschedule handoff — team will call to rearrange timing. */
+export function rescheduleHandoff() {
+  return textMsg(
+    `അപ്പോയിന്റ്മന്റ് reschedule ചെയ്യാൻ ഞങ്ങളുടെ ടീം ഉടൻ വിളിക്കും 🙏` +
+    `\nNeed to change your appointment? Our team will call you shortly.` +
+    CALL_LINE,
+  );
+}
+
 // ── Legacy builders (unreachable, kept so legacy handlers compile) ───────────
 
 export function menu() {
