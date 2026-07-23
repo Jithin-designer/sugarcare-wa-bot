@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * camp-blast.js — SugarCARE Camp Screening WhatsApp Blast
- * Template: camp_screening_announcement (5 variables)
+ * Template: camp_screening_short (5 variables)
  * {{1}} patient name, {{2}} clinic name (Malayalam), {{3}} date, {{4}} time, {{5}} maps link
  *
  * Usage:
@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || '1232912896566193';
 const WHATSAPP_TOKEN  = process.env.WHATSAPP_TOKEN;
-const TEMPLATE_NAME   = 'camp_screening_announcement';
+const TEMPLATE_NAME   = 'camp_screening_short';
 const LANGUAGE_CODE   = 'ml'; // Malayalam
 
 const RATE_LIMIT_MS   = 1000;   // 1 message per second (safe under Meta limits)
@@ -33,21 +33,21 @@ const RESUME_FILE     = path.join(__dirname, '.blast-resume.json');
 const CLINICS = {
   edappal: {
     csvMatch:    'Edappal',
-    nameVar:     'എടപ്പാൾ',
+    nameVar:     'എടപ്പാളിൽ',
     date:        '23 ജൂലൈ, വ്യാഴം',
     time:        'രാവിലെ 10 മുതൽ 1 മണി വരെ',
     mapsLink:    'https://maps.google.com/?q=10.7847369,76.0180944',
   },
   padinjarangadi: {
     csvMatch:    'Padinjarangadi',
-    nameVar:     'പടിഞ്ഞാറങ്ങാടി',
+    nameVar:     'പടിഞ്ഞാറങ്ങാടിയിൽ',
     date:        '24 ജൂലൈ, വെള്ളി',
     time:        'രാവിലെ 10 മുതൽ 1 മണി വരെ',
     mapsLink:    'https://maps.google.com/?q=10.787016,76.0673621',
   },
   kanjirathani: {
     csvMatch:    'Kanjirathani',
-    nameVar:     'കാഞ്ഞിരത്താണി',
+    nameVar:     'കാഞ്ഞിരത്താണിയിൽ',
     date:        '25 ജൂലൈ, ശനി',
     time:        'രാവിലെ 10 മുതൽ 1 മണി വരെ',
     mapsLink:    'https://maps.google.com/?q=10.7738914,76.0612044',
